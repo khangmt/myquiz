@@ -1,0 +1,10 @@
+# cargo audit settings. Every ignore needs a reason and a date to revisit.
+[advisories]
+ignore = [
+    # rsa (Marvin attack) and libsqlite3-sys (SQLite WAL) appear in Cargo.lock
+    # only because sqlx lists its MySQL and SQLite drivers there; we enable
+    # only the postgres feature, so neither crate is compiled
+    # (`cargo tree -i rsa` prints nothing). Revisit when upgrading sqlx.
+    "RUSTSEC-2023-0071",
+    "RUSTSEC-2026-0459",
+]
