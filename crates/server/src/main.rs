@@ -6,8 +6,7 @@
 //! - `myquiz healthcheck` is the Docker health check (no curl in the image).
 
 mod config;
-// Used by the WebSocket gateway, which arrives in the next PR.
-#[allow(dead_code, unused_imports)]
+mod gateway;
 mod live;
 mod routes;
 mod state;
@@ -114,7 +113,14 @@ async fn serve(role: Role, cfg: Config) -> anyhow::Result<()> {
         MIGRATOR.run(&state.db).await?;
     }
 
-    let app = routes::router(state);
+    let mut app = routes::router(state.clone());
+    if role == Role::Game {
+        let hub = gateway::hub::Hub::start(state.redis.clone(), &cfg.redis_url).await?;
+        let store = live::LiveStore::with_countdown(state.redis.clone(), cfg.countdown_ms);
+        let service = gateway::game::GameService::new(store, state.db.clone(), hub);
+        gateway::spawn_sweep(service.clone());
+        app = app.merge(gateway::router(service));
+    }
     let listener = tokio::net::TcpListener::bind(&cfg.bind_addr).await?;
     tracing::info!(role = role.as_str(), addr = %cfg.bind_addr, "listening");
     axum::serve(listener, app)

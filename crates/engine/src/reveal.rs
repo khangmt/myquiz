@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::answer::Submission;
 use crate::matching::{is_correct, normalize};
@@ -28,14 +29,16 @@ pub struct AnswerResult<P> {
     pub response_ms: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../web/src/generated/")]
 pub struct OptionCount {
     #[serde(rename = "optionId")]
     pub option_id: OptionId,
     pub count: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../web/src/generated/")]
 pub struct TextCount {
     pub text: String,
     pub count: u32,

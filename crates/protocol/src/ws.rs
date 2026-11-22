@@ -1,0 +1,292 @@
+//! WebSocket messages (design section 7).
+//!
+//! Every frame is a JSON envelope. From the client:
+//! `{ "t": "answer:submit", "id": 17, "d": { ... } }`, where `id` is optional
+//! and asks for an ack. Back from the server:
+//! `{ "t": "ack", "id": 17, "ok": true, "d": { ... } }` or
+//! `{ "t": "ack", "id": 17, "ok": false, "code": "LATE" }`.
+//! Pushes use `{ "t": "question:start", "d": { ... } }`.
+
+use myquiz_engine::reveal::{OptionCount, TextCount};
+use myquiz_engine::view::PublicQuestion;
+use myquiz_engine::{GameState, OptionId, Submission};
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+macro_rules! wire {
+    ($($item:item)*) => {
+        $(
+            #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+            #[serde(rename_all = "camelCase")]
+            #[ts(export, export_to = "../../../web/src/generated/")]
+            $item
+        )*
+    };
+}
+
+/// A client frame: the optional request id plus the message.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct Inbound {
+    #[serde(default)]
+    pub id: Option<u64>,
+    #[serde(flatten)]
+    pub msg: ClientMessage,
+}
+
+/// Everything a client may send.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "t", content = "d")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub enum ClientMessage {
+    #[serde(rename = "host:attach")]
+    HostAttach(HostAttach),
+    #[serde(rename = "host:lock")]
+    HostLock(HostLock),
+    #[serde(rename = "host:kick")]
+    HostKick(HostKick),
+    #[serde(rename = "host:start")]
+    HostStart(Empty),
+    #[serde(rename = "host:next")]
+    HostNext(HostNext),
+    #[serde(rename = "host:skip")]
+    HostSkip(HostSkip),
+    #[serde(rename = "host:end")]
+    HostEnd(Empty),
+    #[serde(rename = "player:join")]
+    PlayerJoin(PlayerJoin),
+    #[serde(rename = "player:resume")]
+    PlayerResume(PlayerResume),
+    #[serde(rename = "answer:submit")]
+    AnswerSubmit(AnswerSubmit),
+    #[serde(rename = "time:ping")]
+    TimePing(TimePing),
+}
+
+/// A payload with no fields, `{}`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct Empty {}
+
+wire! {
+    pub struct HostAttach { pub pin: String }
+    pub struct HostLock { pub locked: bool }
+    pub struct HostKick { pub player_id: String }
+    pub struct HostNext { pub expect: GameState }
+    pub struct HostSkip { pub index: usize }
+
+    pub struct PlayerJoin { pub pin: String, pub nickname: String, pub device_id: String }
+    pub struct PlayerResume { pub pin: String, pub token: String }
+
+    pub struct AnswerSubmit {
+        pub index: usize,
+        #[serde(flatten)]
+        pub submission: Submission,
+    }
+
+    pub struct TimePing { pub client_sent_at: f64 }
+
+    // ---- ack payloads ----
+
+    pub struct TimePong { pub client_sent_at: f64, pub server_now: u64 }
+    pub struct AnswerAccepted { pub accepted: bool }
+
+    /// Sent on host:attach, player:join and player:resume so a (re)connecting
+    /// screen can draw itself without waiting for the next push.
+    pub struct GameSnapshot {
+        pub pin: String,
+        pub state: GameState,
+        pub locked: bool,
+        pub players: Vec<LobbyPlayer>,
+        /// Set while a question is running.
+        pub question: Option<QuestionStart>,
+        /// For players: their own standing.
+        pub me: Option<MyStanding>,
+    }
+
+    pub struct PlayerJoined { pub player_id: String, pub token: String, pub snapshot: GameSnapshot }
+
+    pub struct MyStanding {
+        pub player_id: String,
+        pub nickname: String,
+        pub score: u64,
+        pub rank: u32,
+        /// Whether this player already answered the running question.
+        pub answered: bool,
+    }
+
+    // ---- server pushes ----
+
+    pub struct LobbyPlayer { pub id: String, pub nickname: String }
+    pub struct LobbyUpdate { pub players: Vec<LobbyPlayer>, pub count: usize, pub locked: bool }
+    pub struct LobbyJoined { pub nickname: String, pub player_count: usize }
+
+    pub struct QuestionStart {
+        #[serde(flatten)]
+        pub question: PublicQuestion,
+        /// Server clock, ms since the Unix epoch: when options show.
+        pub starts_at: u64,
+        /// Server clock: when answers stop being accepted.
+        pub ends_at: u64,
+    }
+
+    pub struct QuestionProgress { pub answered: u32, pub connected: u32 }
+
+    pub struct QuestionReveal {
+        pub index: usize,
+        pub correct_option_ids: Vec<OptionId>,
+        pub accepted_answers: Vec<String>,
+        pub distribution: Vec<OptionCount>,
+        pub top_text_answers: Vec<TextCount>,
+    }
+
+    pub struct QuestionResult {
+        pub index: usize,
+        pub correct: bool,
+        pub points: u32,
+        pub total: u64,
+        pub rank: u32,
+        pub correct_option_ids: Vec<OptionId>,
+    }
+
+    pub struct ScoreRow { pub nickname: String, pub score: u64 }
+    pub struct Leaderboard { pub top: Vec<ScoreRow> }
+
+    pub struct GameEnded { pub reason: EndReason }
+    pub struct ErrorPush { pub code: String }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub enum EndReason {
+    Finished,
+    HostEnded,
+    HostTimeout,
+    Suspended,
+}
+
+/// Everything the server pushes, with its event name.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "t", content = "d")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub enum ServerPush {
+    #[serde(rename = "lobby:update")]
+    LobbyUpdate(LobbyUpdate),
+    #[serde(rename = "lobby:joined")]
+    LobbyJoined(LobbyJoined),
+    #[serde(rename = "player:kicked")]
+    PlayerKicked(Empty),
+    #[serde(rename = "question:start")]
+    QuestionStart(QuestionStart),
+    #[serde(rename = "question:progress")]
+    QuestionProgress(QuestionProgress),
+    #[serde(rename = "question:reveal")]
+    QuestionReveal(QuestionReveal),
+    #[serde(rename = "question:result")]
+    QuestionResult(QuestionResult),
+    #[serde(rename = "leaderboard:show")]
+    LeaderboardShow(Leaderboard),
+    #[serde(rename = "game:podium")]
+    GamePodium(Leaderboard),
+    #[serde(rename = "game:ended")]
+    GameEnded(GameEnded),
+    #[serde(rename = "error")]
+    Error(ErrorPush),
+}
+
+/// The ack frame for a request that carried an `id`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct Ack {
+    /// Always "ack".
+    pub t: String,
+    pub id: u64,
+    pub ok: bool,
+    #[serde(default)]
+    #[ts(type = "unknown")]
+    pub d: Option<serde_json::Value>,
+    #[serde(default)]
+    pub code: Option<String>,
+}
+
+impl Ack {
+    pub fn ok(id: u64, d: impl Serialize) -> Self {
+        Ack {
+            t: "ack".into(),
+            id,
+            ok: true,
+            d: Some(serde_json::to_value(d).expect("serialisable ack")),
+            code: None,
+        }
+    }
+
+    pub fn err(id: u64, code: impl Into<String>) -> Self {
+        Ack {
+            t: "ack".into(),
+            id,
+            ok: false,
+            d: None,
+            code: Some(code.into()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_client_frames() {
+        let f: Inbound = serde_json::from_str(
+            r#"{"t":"answer:submit","id":17,"d":{"index":2,"optionIds":[1,3]}}"#,
+        )
+        .unwrap();
+        assert_eq!(f.id, Some(17));
+        let ClientMessage::AnswerSubmit(a) = f.msg else {
+            panic!()
+        };
+        assert_eq!(a.index, 2);
+        assert_eq!(a.submission.option_ids, vec![1, 3]);
+
+        let f: Inbound = serde_json::from_str(r#"{"t":"host:start","d":{}}"#).unwrap();
+        assert_eq!(f.id, None);
+        assert_eq!(f.msg, ClientMessage::HostStart(Empty {}));
+
+        let f: Inbound = serde_json::from_str(
+            r#"{"t":"host:next","id":1,"d":{"expect":{"state":"reveal","index":0}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            f.msg,
+            ClientMessage::HostNext(HostNext {
+                expect: GameState::Reveal { index: 0 }
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_events() {
+        assert!(serde_json::from_str::<Inbound>(r#"{"t":"host:hack","d":{}}"#).is_err());
+        assert!(serde_json::from_str::<Inbound>(r#"{"t":"player:join","d":{}}"#).is_err());
+    }
+
+    #[test]
+    fn push_and_ack_shapes() {
+        let p = ServerPush::QuestionProgress(QuestionProgress {
+            answered: 3,
+            connected: 10,
+        });
+        assert_eq!(
+            serde_json::to_string(&p).unwrap(),
+            r#"{"t":"question:progress","d":{"answered":3,"connected":10}}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&Ack::err(4, "LATE")).unwrap(),
+            r#"{"t":"ack","id":4,"ok":false,"d":null,"code":"LATE"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&Ack::ok(5, AnswerAccepted { accepted: true })).unwrap(),
+            r#"{"t":"ack","id":5,"ok":true,"d":{"accepted":true},"code":null}"#
+        );
+    }
+}

@@ -6,10 +6,12 @@
 //! The correct answers go out only at reveal, in [`RevealedAnswer`].
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::quiz::{OptionId, Question, QuestionKind};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../web/src/generated/")]
 pub struct PublicOption {
     pub id: OptionId,
     pub text: String,
@@ -17,8 +19,9 @@ pub struct PublicOption {
 
 /// The payload of `question:start` (design section 7), minus the timing
 /// fields the gateway adds.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
 pub struct PublicQuestion {
     pub index: usize,
     pub total: usize,
@@ -55,8 +58,9 @@ impl PublicQuestion {
 }
 
 /// The correct answer, sent at reveal only.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
 pub struct RevealedAnswer {
     pub correct_option_ids: Vec<OptionId>,
     pub accepted_answers: Vec<String>,
