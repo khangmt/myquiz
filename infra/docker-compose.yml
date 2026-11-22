@@ -1,0 +1,137 @@
+# The whole stack. Memory limits add up to about 9 GB, under the 16 GB cap on
+# the faculty server (design section 10). The kernel kills a container that
+# passes its limit and `restart: unless-stopped` brings it back, so the app
+# never takes memory from other users' jobs.
+#
+#   cp .env.example .env   # then fill in the passwords
+#   docker compose up -d --build
+
+name: myquiz
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: infra/server.Dockerfile
+  image: ${MYQUIZ_IMAGE:-myquiz-server:local}
+  restart: unless-stopped
+  cpu_shares: 512
+  environment: &app-env
+    DATABASE_URL: postgres://myquiz:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/myquiz
+    REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379
+    BIND_ADDR: 0.0.0.0:8080
+    LOG_JSON: "true"
+    RUST_LOG: ${RUST_LOG:-info,sqlx=warn}
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis: { condition: service_healthy }
+  healthcheck:
+    test: ["CMD", "myquiz", "healthcheck"]
+    interval: 10s
+    timeout: 3s
+    retries: 3
+  networks: [internal]
+
+services:
+  caddy:
+    build:
+      context: ..
+      dockerfile: infra/caddy.Dockerfile
+    image: ${CADDY_IMAGE:-myquiz-caddy:local}
+    restart: unless-stopped
+    cpu_shares: 512
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - caddy_data:/data
+    depends_on: [api, game]
+    deploy:
+      resources:
+        limits: { memory: 512M, cpus: "0.5" }
+    networks: [internal, public]
+
+  api:
+    <<: *app
+    command: ["api"]
+    deploy:
+      replicas: 2
+      resources:
+        limits: { memory: 512M, cpus: "1" }
+
+  game:
+    <<: *app
+    command: ["game"]
+    ulimits:
+      nofile: { soft: 65536, hard: 65536 }
+    deploy:
+      replicas: 2
+      resources:
+        limits: { memory: 1G, cpus: "3" }
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    cpu_shares: 512
+    command: ["postgres", "-c", "shared_buffers=768MB", "-c", "max_connections=100"]
+    environment:
+      POSTGRES_USER: myquiz
+      POSTGRES_DB: myquiz
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myquiz -d myquiz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits: { memory: 3G, cpus: "1.5" }
+    networks: [internal]
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    cpu_shares: 512
+    # AOF so live games survive a restart (NFR-06); noeviction because game
+    # state must never be silently dropped.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 1536mb
+      - --maxmemory-policy
+      - noeviction
+      - --requirepass
+      - ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    deploy:
+      resources:
+        limits: { memory: 2G, cpus: "1" }
+    networks: [internal]
+
+  # The nightly backup and Uptime Kuma services (0.25 GB each) arrive with the
+  # deployment PR on day 13.
+
+volumes:
+  pg_data:
+  redis_data:
+  caddy_data:
+
+networks:
+  internal:
+    internal: true   # PostgreSQL and Redis are never reachable from outside (SEC-30)
+  public:

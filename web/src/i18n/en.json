@@ -1,0 +1,5 @@
+{
+  "app": { "name": "myquiz", "tagline": "Create quizzes, play live and download reports." },
+  "home": { "join": "Join a game", "pinPlaceholder": "Game PIN", "signIn": "Sign in with Google" },
+  "language": "Language"
+}
