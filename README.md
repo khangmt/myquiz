@@ -91,3 +91,19 @@ Some networks (often on macOS with Docker Desktop) give containers a DNS server 
 so `apt-get` fails with "Temporary failure resolving 'deb.debian.org'". Give Docker public DNS servers:
 in Docker Desktop open Settings, then Docker Engine, add `"dns": ["8.8.8.8", "1.1.1.1"]` to the JSON,
 and click Apply & restart. On Linux put the same line in `/etc/docker/daemon.json` and restart Docker.
+
+## Admins
+
+Admins can search accounts, suspend or reactivate them, and read the audit
+log at `/admin`. A suspended account is signed out, cannot sign in again, and
+its running games end within about 10 seconds.
+
+There is no admin by default. After the person has signed in once, grant
+the role from the server:
+
+```sh
+docker compose exec api myquiz admin someone@uit.edu.vn            # grant
+docker compose exec api myquiz admin someone@uit.edu.vn --revoke   # back to a normal user
+```
+
+Both are written to the audit log.

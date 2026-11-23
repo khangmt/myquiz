@@ -13,7 +13,8 @@
     "myQuizzes": "My quizzes",
     "signIn": "Sign in",
     "signOut": "Sign out",
-    "reports": "Reports"
+    "reports": "Reports",
+    "admin": "Admin"
   },
   "common": {
     "loading": "Loading…",
@@ -116,7 +117,9 @@
     "VERSION_CONFLICT": "This quiz was changed somewhere else; changes here are not saved.",
     "QUIZ_NOT_PUBLISHED": "Publish the quiz before hosting a game.",
     "CAPACITY_FULL": "The server is running as many games as it can; try again in a few minutes.",
-    "SESSION_NOT_FOUND": "Report not found."
+    "SESSION_NOT_FOUND": "Report not found.",
+    "CANNOT_SUSPEND_SELF": "An admin cannot suspend their own account.",
+    "USER_NOT_FOUND": "User not found."
   },
   "editor": {
     "saved": "Saved",
@@ -273,6 +276,37 @@
     "delete": "Delete report",
     "confirmDelete": "Delete this report for good? This can't be undone.",
     "view": "View report"
+  },
+  "admin": {
+    "title": "Administration",
+    "notAllowed": "This page is for administrators.",
+    "users": "Users",
+    "audit": "Audit log",
+    "searchUsers": "Search by email or name",
+    "email": "Email",
+    "name": "Name",
+    "joined": "Joined",
+    "quizzes": "Quizzes",
+    "games": "Games",
+    "status": "Status",
+    "statusName": {
+      "active": "Active",
+      "suspended": "Suspended"
+    },
+    "suspend": "Suspend",
+    "reactivate": "Reactivate",
+    "confirmSuspend": "Suspend {{email}}? Their running games will end and they will be signed out.",
+    "filterUser": "User email",
+    "filterAction": "Action",
+    "allActions": "All actions",
+    "from": "From",
+    "to": "To",
+    "time": "Time",
+    "actor": "By",
+    "action": "Action",
+    "target": "Target",
+    "details": "Details",
+    "system": "System"
   },
   "expiry": {
     "banner_one": "{{count}} quiz will be deleted in {{days}} day(s):",

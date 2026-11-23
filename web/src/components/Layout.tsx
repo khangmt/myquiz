@@ -38,6 +38,11 @@ export function Layout() {
               {t("nav.reports")}
             </Link>
           )}
+          {me.data?.role === "admin" && (
+            <Link to="/admin" className="text-slate-700 hover:text-indigo-700">
+              {t("nav.admin")}
+            </Link>
+          )}
           <div className="ml-auto flex items-center gap-3">
             <LanguageSelect />
             {me.data ? (
