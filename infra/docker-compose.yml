@@ -27,6 +27,8 @@ x-app: &app
     GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
     COOKIE_SECURE: ${COOKIE_SECURE:-true}
+    RETENTION_DAYS: ${RETENTION_DAYS:-21}
+    MAX_ACTIVE_GAMES: ${MAX_ACTIVE_GAMES:-200}
   depends_on:
     postgres: { condition: service_healthy }
     redis: { condition: service_healthy }

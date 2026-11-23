@@ -29,6 +29,7 @@ sha2 = "0.11.1"
 hex = "0.4.3"
 base64 = "0.23.1"
 hmac = "0.13.0"
+time = { version = "0.3", features = ["formatting"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "form"] }
 
 [dev-dependencies]

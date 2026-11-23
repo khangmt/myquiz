@@ -60,6 +60,8 @@ mod tests {
             redis_url,
             db_max_connections: 2,
             countdown_ms: 3000,
+            retention_days: 21,
+            max_active_games: 200,
             auth: crate::config::AuthSettings::for_tests(),
             log_json: false,
         };
