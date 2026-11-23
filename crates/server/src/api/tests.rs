@@ -83,6 +83,7 @@ pub(super) async fn env(domains: &str) -> Option<Env> {
             .into_owned(),
         auth,
         log_json: false,
+        cleanup: crate::config::CleanupSettings::for_tests(),
     };
     let app_state = AppState::connect(crate::Role::Api, &cfg).await.unwrap();
     crate::MIGRATOR.run(&app_state.db).await.unwrap();

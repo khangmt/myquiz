@@ -272,5 +272,11 @@
     "delete": "Delete report",
     "confirmDelete": "Delete this report for good? This can't be undone.",
     "view": "View report"
+  },
+  "expiry": {
+    "banner_one": "{{count}} quiz will be deleted in {{days}} day(s):",
+    "banner_other": "{{count}} quizzes will be deleted in {{days}} day(s):",
+    "howToKeep": "Edit it, host a game with it, or download the zip to keep it.",
+    "dismiss": "Hide for today"
   }
 }

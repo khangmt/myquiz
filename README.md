@@ -55,6 +55,19 @@ postgres 3 GB, redis 2 GB, caddy 0.5 GB, plus 0.5 GB reserved for backup and upt
 the 16 GB cap on the production server. Only Caddy publishes ports; PostgreSQL and Redis sit on an
 internal network.
 
+### Quizzes are kept 3 weeks
+
+A quiz is deleted 21 days (`RETENTION_DAYS`) after it was last edited or played; its reports stay
+for 12 months. Every day at 02:00 Vietnam time one api instance:
+
+- emails each owner 7 days and 1 day before their quizzes go (needs `SMTP_URL`; without it no
+  email is sent, and the quiz-list badge and the banner after sign-in still warn them);
+- deletes quizzes past their date that are not in a running game, with images no other quiz uses;
+- purges quizzes the owner deleted more than 30 days ago, and reports older than 12 months.
+
+Each deletion and each email is written to the audit log. `docker compose exec api myquiz cleanup`
+runs it once by hand; `CLEANUP_ENABLED=false` pauses it.
+
 ### Playing on phones on the same Wi-Fi
 
 The host screen shows the address players should open. It comes from `JOIN_URL` in
