@@ -18,16 +18,18 @@ pub struct Standing<P> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ranked<P> {
-    /// 1-based rank. Every player gets a distinct rank because the tie-breaks
-    /// end with join order, which is unique.
+    /// 1-based rank. Players with the same score and the same total time
+    /// share a rank ("1, 1, 3"); join order only decides who is listed first.
     pub rank: u32,
     #[serde(flatten)]
     pub standing: Standing<P>,
 }
 
 /// Sorts by score (high first), then total response time (low first), then
-/// join order (low first), and assigns ranks 1..=n. Ranking 200 players this
-/// way takes microseconds, so it runs in full after every question.
+/// join order (low first). Ranks follow score and time only, so two players
+/// who are truly level (for example, both on 0 having never answered) share
+/// a rank instead of one being ranked lower for joining later. Ranking 200
+/// players takes microseconds, so it runs in full after every question.
 pub fn rank<P>(mut standings: Vec<Standing<P>>) -> Vec<Ranked<P>> {
     standings.sort_by(|a, b| {
         b.score
@@ -35,14 +37,20 @@ pub fn rank<P>(mut standings: Vec<Standing<P>>) -> Vec<Ranked<P>> {
             .then(a.total_time_ms.cmp(&b.total_time_ms))
             .then(a.join_order.cmp(&b.join_order))
     });
-    standings
-        .into_iter()
-        .enumerate()
-        .map(|(i, standing)| Ranked {
-            rank: i as u32 + 1,
-            standing,
-        })
-        .collect()
+    let mut out: Vec<Ranked<P>> = Vec::with_capacity(standings.len());
+    for (i, standing) in standings.into_iter().enumerate() {
+        let rank = match out.last() {
+            Some(prev)
+                if prev.standing.score == standing.score
+                    && prev.standing.total_time_ms == standing.total_time_ms =>
+            {
+                prev.rank
+            }
+            _ => i as u32 + 1,
+        };
+        out.push(Ranked { rank, standing });
+    }
+    out
 }
 
 /// The top-5 leaderboard shown after each question.
@@ -97,6 +105,15 @@ mod tests {
             s("first_joiner", 500, 3_000, 1),
         ]);
         assert_eq!(order(&r), ["first_joiner", "fast", "late_joiner", "slow"]);
+        // Same score and time: same rank, listed by join order.
+        assert_eq!(r.iter().map(|x| x.rank).collect::<Vec<_>>(), [1, 1, 1, 4]);
+    }
+
+    #[test]
+    fn players_level_on_zero_share_a_rank() {
+        let r = rank(vec![s("a", 0, 0, 0), s("b", 0, 0, 1), s("c", 10, 500, 2)]);
+        assert_eq!(order(&r), ["c", "a", "b"]);
+        assert_eq!(r.iter().map(|x| x.rank).collect::<Vec<_>>(), [1, 2, 2]);
     }
 
     #[test]

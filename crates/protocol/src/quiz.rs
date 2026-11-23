@@ -155,6 +155,16 @@ pub struct PinCheck {
     pub locked: bool,
 }
 
+/// `GET /config`: settings the web app needs before sign-in.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct ClientConfig {
+    /// Origin players open, e.g. http://192.168.1.20:8080. The join page is
+    /// `<joinUrl>/join?pin=<pin>`.
+    pub join_url: String,
+}
+
 /// Response of `POST /media`. Put `id` in a quiz; show `url`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

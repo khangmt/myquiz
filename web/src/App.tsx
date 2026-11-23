@@ -5,6 +5,8 @@ import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Editor } from "./pages/Editor";
 import { Placeholder } from "./pages/Placeholder";
+import { Host } from "./game/Host";
+import { Play } from "./game/Play";
 import { QuizList } from "./pages/QuizList";
 
 export default function App() {
@@ -29,8 +31,15 @@ export default function App() {
             </RequireAuth>
           }
         />
-        <Route path="join" element={<Placeholder />} />
-        <Route path="host/:pin" element={<Placeholder />} />
+        <Route path="join" element={<Play />} />
+        <Route
+          path="host/:pin"
+          element={
+            <RequireAuth>
+              <Host />
+            </RequireAuth>
+          }
+        />
         <Route path="*" element={<Placeholder />} />
       </Route>
     </Routes>

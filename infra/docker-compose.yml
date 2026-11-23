@@ -22,6 +22,7 @@ x-app: &app
     LOG_JSON: "true"
     RUST_LOG: ${RUST_LOG:-info,sqlx=warn}
     PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL in .env}
+    JOIN_URL: ${JOIN_URL:-}
     APP_SECRET: ${APP_SECRET:?set APP_SECRET in .env}
     GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
