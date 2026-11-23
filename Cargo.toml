@@ -25,6 +25,7 @@ fred = { version = "10", features = ["i-scripts", "sha-1", "subscriber-client"] 
 
 myquiz-engine = { path = "crates/engine" }
 myquiz-protocol = { path = "crates/protocol" }
+myquiz-bundle = { path = "crates/bundle" }
 
 [profile.release]
 lto = "thin"
