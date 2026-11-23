@@ -25,6 +25,9 @@ use hub::Delivery;
 
 /// Largest accepted frame (SEC-21).
 pub const MAX_FRAME_BYTES: usize = 4 * 1024;
+const SOCKET_BUFFER_BYTES: usize = 8 * 1024;
+/// A client that stops reading is dropped rather than buffered forever.
+const MAX_WRITE_BUFFER_BYTES: usize = 1024 * 1024;
 /// Messages per second per socket (SEC-19).
 pub const RATE_PER_SEC: f64 = 10.0;
 const PING_EVERY: Duration = Duration::from_secs(25);
@@ -100,6 +103,13 @@ async fn upgrade(
     let sid = cookie(&headers, "sid");
     ws.max_message_size(MAX_FRAME_BYTES)
         .max_frame_size(MAX_FRAME_BYTES)
+        // The 128 KiB default buffers cost about 150 KB per socket (load
+        // test, 10,000 sockets); clients send at most 4 KiB and our pushes
+        // are small, so 8 KiB buffers do. The write buffer still grows for
+        // one large message, up to the cap.
+        .read_buffer_size(SOCKET_BUFFER_BYTES)
+        .write_buffer_size(SOCKET_BUFFER_BYTES)
+        .max_write_buffer_size(MAX_WRITE_BUFFER_BYTES)
         .on_upgrade(move |socket| async move {
             let user = match sid {
                 Some(sid) => service.store.login_user(&sid).await.unwrap_or(None),

@@ -11,3 +11,6 @@ dist/
 *.tsbuildinfo
 dump.rdb
 /data/
+# Encrypted backups land here on the server (infra/backups by default).
+/infra/backups/
+*.age

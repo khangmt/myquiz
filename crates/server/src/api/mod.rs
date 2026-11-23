@@ -70,6 +70,28 @@ impl ApiState {
     }
 }
 
+/// `GET /health`: the public uptime check. Unlike the internal `/healthz`
+/// it says nothing about versions or roles: just whether the API reaches
+/// PostgreSQL and Redis.
+async fn health(
+    axum::extract::State(state): axum::extract::State<ApiState>,
+) -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+    use fred::prelude::*;
+    let db = sqlx::query("SELECT 1").execute(&state.app.db).await.is_ok();
+    let redis = state.app.redis.ping::<String>(None).await.is_ok();
+    if db && redis {
+        (
+            axum::http::StatusCode::OK,
+            axum::Json(serde_json::json!({ "status": "ok" })),
+        )
+    } else {
+        (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(serde_json::json!({ "status": "down" })),
+        )
+    }
+}
+
 /// `GET /config`: public settings for the web app.
 async fn client_config(
     axum::extract::State(state): axum::extract::State<ApiState>,
@@ -90,6 +112,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/auth/logout", post(auth::logout))
         .route("/me", get(auth::me).patch(auth::update_me))
         .route("/config", get(client_config))
+        .route("/health", get(health))
         .route("/quizzes", get(quizzes::list).post(quizzes::create))
         .route("/quizzes/expiring", get(quizzes::expiring))
         .route(

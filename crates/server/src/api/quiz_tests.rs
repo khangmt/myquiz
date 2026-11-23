@@ -1085,6 +1085,20 @@ async fn every_private_endpoint_needs_a_session_and_csrf() {
     }
 }
 
+/// The public uptime check answers without a session and tells nothing
+/// about the server beyond "ok".
+#[tokio::test]
+async fn public_health_check() {
+    let env = crate::api_env_or_skip!("");
+    let res = send(
+        &env.app,
+        Request::get("/api/v1/health").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(json_body(res).await, json!({ "status": "ok" }));
+}
+
 #[tokio::test]
 async fn quizzes_due_within_three_days_are_listed_for_the_warning() {
     let env = crate::api_env_or_skip!("");
