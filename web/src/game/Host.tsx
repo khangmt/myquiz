@@ -39,9 +39,11 @@ export function Host() {
   const state = useRef<GameState>({ state: "lobby" });
   const lastQuestion = useRef<QuestionStart | null>(null);
   const socket = useRef<GameSocket | null>(null);
+  const [reportId, setReportId] = useState<string | null>(null);
 
   const fromSnapshot = useCallback((s: GameSnapshot) => {
     state.current = s.state;
+    if (s.reportId) setReportId(s.reportId);
     setPlayers(s.players);
     setLocked(s.locked);
     switch (s.state.state) {
@@ -254,6 +256,11 @@ export function Host() {
       {view.kind === "ended" && (
         <>
           <Big>{t(`game.ended.${view.reason}`, { defaultValue: t("game.ended.finished") })}</Big>
+          {reportId && (
+            <Link to={`/reports/${reportId}`} className={button}>
+              {t("reports.view")}
+            </Link>
+          )}
           <Link to="/quizzes" className="underline">
             {t("nav.myQuizzes")}
           </Link>

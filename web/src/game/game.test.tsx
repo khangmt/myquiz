@@ -36,7 +36,7 @@ class FakeSocket {
   }
 }
 
-const lobby = { pin: "123456", state: { state: "lobby" }, locked: false, players: [], question: null, me: null };
+const lobby = { pin: "123456", state: { state: "lobby" }, locked: false, players: [], question: null, me: null, reportId: null };
 const question = (over: object = {}) => ({
   startsAt: Date.now() - 1000,
   endsAt: Date.now() + 20_000,
@@ -125,7 +125,7 @@ test("the host runs the lobby, starts, and moves on after the reveal", async () 
   renderApp("/host/123456");
   const ws = await socket();
   expect(ws.sent[0]).toMatchObject({ t: "host:attach", d: { pin: "123456" } });
-  ws.ack("host:attach", { ...lobby, players: [{ id: "p1", nickname: "Lan" }] });
+  ws.ack("host:attach", { ...lobby, reportId: "s-42", players: [{ id: "p1", nickname: "Lan" }] });
   expect(await screen.findByText("123456")).toBeTruthy();
   expect(screen.getByText("1 người chơi")).toBeTruthy();
   expect(await screen.findByText("http://192.168.1.20:8080/join?pin=123456")).toBeTruthy();
@@ -149,6 +149,9 @@ test("the host runs the lobby, starts, and moves on after the reveal", async () 
   ws.push("leaderboard:show", { top: [{ nickname: "Lan", score: 950 }] });
   expect(await screen.findByText("Bảng xếp hạng")).toBeTruthy();
   expect(screen.getByText("950 điểm")).toBeTruthy();
+
+  ws.push("game:ended", { reason: "finished" });
+  expect((await screen.findByText("Xem báo cáo")).getAttribute("href")).toBe("/reports/s-42");
 });
 
 test("a player who runs out of time sees time's up, not wrong", async () => {

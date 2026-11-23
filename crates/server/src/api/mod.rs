@@ -7,6 +7,7 @@ pub mod games;
 pub mod media;
 pub mod quizzes;
 pub mod ratelimit;
+pub mod reports;
 pub mod signed;
 pub mod zip;
 
@@ -95,6 +96,9 @@ pub fn router(state: ApiState) -> Router {
         .route("/games/pin/{pin}", get(games::check_pin))
         .route("/quizzes/{id}/export", post(zip::export))
         .route("/exports/{token}", get(zip::download))
+        .route("/sessions", get(reports::list))
+        .route("/sessions/{id}", get(reports::get).delete(reports::delete))
+        .route("/sessions/{id}/exports", post(reports::export))
         .route("/quiz-template.zip", get(zip::template))
         // SEC-21: 1 MB for everything but uploads.
         .layer(RequestBodyLimitLayer::new(1024 * 1024));

@@ -12,7 +12,8 @@
   "nav": {
     "myQuizzes": "My quizzes",
     "signIn": "Sign in",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "reports": "Reports"
   },
   "common": {
     "loading": "Loading…",
@@ -114,7 +115,8 @@
     "FILE_TOO_LARGE_IMAGE": "The image is too large (at most 5 MB).",
     "VERSION_CONFLICT": "This quiz was changed somewhere else; changes here are not saved.",
     "QUIZ_NOT_PUBLISHED": "Publish the quiz before hosting a game.",
-    "CAPACITY_FULL": "The server is running as many games as it can; try again in a few minutes."
+    "CAPACITY_FULL": "The server is running as many games as it can; try again in a few minutes.",
+    "SESSION_NOT_FOUND": "Report not found."
   },
   "editor": {
     "saved": "Saved",
@@ -240,5 +242,35 @@
       "DISCONNECTED": "Disconnected, please try again.",
       "TIMEOUT": "The server didn't answer, please try again."
     }
+  },
+  "reports": {
+    "title": "Game reports",
+    "empty": "No games yet. Host a game to see its report here.",
+    "date": "Date",
+    "quiz": "Quiz",
+    "players": "Players",
+    "averageScore": "Average score",
+    "notFinished": "not finished",
+    "accuracy": "Accuracy",
+    "averageTime": "Avg. time",
+    "participation": "{{value}} of players answered at least one question.",
+    "questions": "Questions",
+    "question": "Question",
+    "answered": "Answered",
+    "correct": "Correct",
+    "hard": "Hard",
+    "playerResults": "Player results",
+    "rank": "Rank",
+    "nickname": "Nickname",
+    "score": "Score",
+    "correctCount": "Correct",
+    "removed": "Removed",
+    "noAnswer": "No answer",
+    "downloadXlsx": "Download Excel",
+    "downloadCsv": "Download CSV (every answer)",
+    "downloadCsvSummary": "Download CSV (summary)",
+    "delete": "Delete report",
+    "confirmDelete": "Delete this report for good? This can't be undone.",
+    "view": "View report"
   }
 }

@@ -726,3 +726,201 @@ async fn bad_zips_are_refused_with_every_problem() {
     let res = send(&env.app, import(template)).await;
     assert_eq!(res.status(), StatusCode::CREATED);
 }
+
+/// A finished game written straight to the database, as the game servers
+/// leave it: two players ranked, one removed, one unanswered question.
+async fn finished_game(env: &Env, host: &User) -> Uuid {
+    let snapshot = json!({
+        "title": "Địa lý",
+        "questions": [
+            { "kind": "single", "text": "Thủ đô?", "time_limit_s": 20, "points": 1000,
+              "options": [ { "id": 1, "text": "Hà Nội", "is_correct": true },
+                           { "id": 2, "text": "=Huế", "is_correct": false } ] },
+            { "kind": "fill_blank", "text": "Sông ___", "time_limit_s": 30, "points": 1000,
+              "accepted_answers": ["Hồng"] }
+        ]
+    });
+    let session: Uuid = sqlx::query_scalar(
+        "INSERT INTO game_sessions (host_id, quiz_snapshot, status, started_at, ended_at, player_count) \
+         VALUES ($1, $2, 'ended', now() - interval '5 minutes', now(), 2) RETURNING id",
+    )
+    .bind(host.id)
+    .bind(&snapshot)
+    .fetch_one(&env.db)
+    .await
+    .unwrap();
+    let mut ids = Vec::new();
+    for (i, (nick, score, rank, kicked)) in [
+        ("An", Some(1900), Some(1), false),
+        ("Bình", Some(0), Some(2), false),
+        ("Xấu", None, None, true),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let id: Uuid = sqlx::query_scalar(
+            "INSERT INTO session_players (session_id, nickname, join_order, final_score, final_rank, kicked) \
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+        )
+        .bind(session)
+        .bind(nick)
+        .bind(i as i32)
+        .bind(score)
+        .bind(rank)
+        .bind(kicked)
+        .fetch_one(&env.db)
+        .await
+        .unwrap();
+        ids.push(id);
+    }
+    // An: right, right. Bình: wrong on Q1, nothing on Q2.
+    for (player, q, opts, text, correct, ms, pts) in [
+        (ids[0], 0, Some(vec![1]), None, true, 2000, 950),
+        (ids[0], 1, None, Some("hong"), true, 6000, 950),
+        (ids[1], 0, Some(vec![2]), None, false, 4000, 0),
+    ] {
+        sqlx::query(
+            "INSERT INTO answers (session_id, player_id, question_index, option_ids, text_answer, \
+             is_correct, response_ms, points, received_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now())",
+        )
+        .bind(session)
+        .bind(player)
+        .bind(q)
+        .bind(opts)
+        .bind(text)
+        .bind(correct)
+        .bind(ms)
+        .bind(pts)
+        .execute(&env.db)
+        .await
+        .unwrap();
+    }
+    session
+}
+
+#[tokio::test]
+async fn reports_list_summary_exports_and_delete() {
+    let env = crate::api_env_or_skip!("");
+    let host = user(&env).await;
+    let other = user(&env).await;
+    let id = finished_game(&env, &host).await;
+
+    // FR-RP-01: the host's list.
+    let res = send(&env.app, host.req("GET", "/api/v1/sessions", None)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let page = json_body(res).await;
+    assert_eq!(page["total"], 1);
+    assert_eq!(page["items"][0]["quizTitle"], "Địa lý");
+    assert_eq!(page["items"][0]["playerCount"], 2);
+    assert_eq!(page["items"][0]["averageScore"], 950.0);
+
+    // Somebody else's report does not exist for them (SEC-23).
+    let res = send(
+        &env.app,
+        other.req("GET", &format!("/api/v1/sessions/{id}"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let res = send(
+        &env.app,
+        other.req(
+            "POST",
+            &format!("/api/v1/sessions/{id}/exports"),
+            Some(json!({ "format": "csv" })),
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+    // FR-RP-02, 03.
+    let res = send(
+        &env.app,
+        host.req("GET", &format!("/api/v1/sessions/{id}"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let r = json_body(res).await;
+    assert_eq!(r["participation"], 1.0);
+    assert_eq!(r["accuracy"], 0.5);
+    assert_eq!(r["questions"][0]["answered"], 2);
+    assert_eq!(r["questions"][0]["accuracy"], 0.5);
+    assert_eq!(r["questions"][0]["averageMs"], 3000);
+    assert_eq!(r["questions"][1]["hard"], false);
+    assert_eq!(r["players"][0]["nickname"], "An");
+    assert_eq!(r["players"][0]["answers"][1]["answer"], "hong");
+    assert_eq!(r["players"][1]["answers"][0]["answer"], "=Huế");
+    assert_eq!(r["players"][1]["answers"][1]["answer"], Value::Null);
+    assert_eq!(r["players"][2]["kicked"], true);
+    assert_eq!(r["players"][2]["rank"], Value::Null);
+
+    // FR-RP-04: CSV with a BOM, one row per player × question, formulas
+    // neutralised; removed players left out.
+    let res = send(
+        &env.app,
+        host.req(
+            "POST",
+            &format!("/api/v1/sessions/{id}/exports"),
+            Some(json!({ "format": "csv" })),
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let url = json_body(res).await["url"].as_str().unwrap().to_string();
+    let res = send(&env.app, Request::get(&url).body(Body::empty()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(res.headers()[header::CONTENT_DISPOSITION]
+        .to_str()
+        .unwrap()
+        .contains("myquiz-report-dia-ly-"));
+    let bytes = http_body_util::BodyExt::collect(res.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    assert!(bytes.starts_with(&[0xEF, 0xBB, 0xBF]));
+    let text = String::from_utf8(bytes[3..].to_vec()).unwrap();
+    assert_eq!(text.lines().count(), 1 + 2 * 2, "{text}");
+    assert!(text.contains("'=Huế"));
+    assert!(text.contains("no answer"));
+    assert!(!text.contains("Xấu"));
+
+    // FR-RP-05: a real xlsx (a zip).
+    let res = send(
+        &env.app,
+        host.req(
+            "POST",
+            &format!("/api/v1/sessions/{id}/exports"),
+            Some(json!({ "format": "xlsx" })),
+        ),
+    )
+    .await;
+    let url = json_body(res).await["url"].as_str().unwrap().to_string();
+    let res = send(&env.app, Request::get(&url).body(Body::empty()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = http_body_util::BodyExt::collect(res.into_body())
+        .await
+        .unwrap()
+        .to_bytes();
+    assert!(bytes.starts_with(b"PK"));
+
+    // FR-RP-09: only the host deletes; then it is gone.
+    let res = send(
+        &env.app,
+        other.req("DELETE", &format!("/api/v1/sessions/{id}"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let res = send(
+        &env.app,
+        host.req("DELETE", &format!("/api/v1/sessions/{id}"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let res = send(
+        &env.app,
+        host.req("GET", &format!("/api/v1/sessions/{id}"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let res = send(&env.app, Request::get(&url).body(Body::empty()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}

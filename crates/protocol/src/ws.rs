@@ -101,6 +101,9 @@ wire! {
         pub question: Option<QuestionStart>,
         /// For players: their own standing.
         pub me: Option<MyStanding>,
+        /// For the host: the game's id, which names its report
+        /// (`/reports/<id>`). Null for players.
+        pub report_id: Option<String>,
     }
 
     pub struct PlayerJoined { pub player_id: String, pub token: String, pub snapshot: GameSnapshot }

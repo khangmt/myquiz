@@ -32,6 +32,11 @@ export function Layout() {
               {t("nav.myQuizzes")}
             </Link>
           )}
+          {me.data && (
+            <Link to="/reports" className="text-slate-700 hover:text-indigo-700">
+              {t("nav.reports")}
+            </Link>
+          )}
           <div className="ml-auto flex items-center gap-3">
             <LanguageSelect />
             {me.data ? (
