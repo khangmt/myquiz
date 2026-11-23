@@ -27,6 +27,9 @@ uuid.workspace = true
 rand = "0.9"
 sha2 = "0.11.1"
 hex = "0.4.3"
+base64 = "0.23.1"
+hmac = "0.13.0"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "form"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

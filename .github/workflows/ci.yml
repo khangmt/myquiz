@@ -86,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: POSTGRES_PASSWORD=x REDIS_PASSWORD=y docker compose -f infra/docker-compose.yml config -q
+      - run: POSTGRES_PASSWORD=x REDIS_PASSWORD=y PUBLIC_URL=https://example.org APP_SECRET=z docker compose -f infra/docker-compose.yml config -q
 
   images:
     name: Docker images build
