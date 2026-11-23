@@ -13,7 +13,8 @@
     "myQuizzes": "Bộ câu hỏi của tôi",
     "signIn": "Đăng nhập",
     "signOut": "Đăng xuất",
-    "reports": "Báo cáo"
+    "reports": "Báo cáo",
+    "admin": "Quản trị"
   },
   "common": {
     "loading": "Đang tải…",
@@ -114,7 +115,9 @@
     "VERSION_CONFLICT": "Bộ câu hỏi vừa được sửa ở nơi khác; thay đổi ở đây chưa được lưu.",
     "QUIZ_NOT_PUBLISHED": "Hãy xuất bản bộ câu hỏi trước khi tổ chức trò chơi.",
     "CAPACITY_FULL": "Máy chủ đang có quá nhiều trò chơi; hãy thử lại sau vài phút.",
-    "SESSION_NOT_FOUND": "Không tìm thấy báo cáo."
+    "SESSION_NOT_FOUND": "Không tìm thấy báo cáo.",
+    "CANNOT_SUSPEND_SELF": "Quản trị viên không thể tự khóa tài khoản của mình.",
+    "USER_NOT_FOUND": "Không tìm thấy người dùng."
   },
   "editor": {
     "saved": "Đã lưu",
@@ -267,5 +270,36 @@
     "delete": "Xoá báo cáo",
     "confirmDelete": "Xoá vĩnh viễn báo cáo này? Không thể hoàn tác.",
     "view": "Xem báo cáo"
+  },
+  "admin": {
+    "title": "Quản trị",
+    "notAllowed": "Trang này chỉ dành cho quản trị viên.",
+    "users": "Người dùng",
+    "audit": "Nhật ký",
+    "searchUsers": "Tìm theo email hoặc tên",
+    "email": "Email",
+    "name": "Tên",
+    "joined": "Ngày tham gia",
+    "quizzes": "Quiz",
+    "games": "Lượt chơi",
+    "status": "Trạng thái",
+    "statusName": {
+      "active": "Hoạt động",
+      "suspended": "Đã khóa"
+    },
+    "suspend": "Khóa",
+    "reactivate": "Mở khóa",
+    "confirmSuspend": "Khóa tài khoản {{email}}? Các trò chơi đang chạy sẽ kết thúc và người này bị đăng xuất.",
+    "filterUser": "Email người dùng",
+    "filterAction": "Hành động",
+    "allActions": "Tất cả hành động",
+    "from": "Từ",
+    "to": "Đến",
+    "time": "Thời gian",
+    "actor": "Người thực hiện",
+    "action": "Hành động",
+    "target": "Đối tượng",
+    "details": "Chi tiết",
+    "system": "Hệ thống"
   }
 }

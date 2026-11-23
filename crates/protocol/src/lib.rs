@@ -57,6 +57,7 @@ pub struct UpdateMe {
     pub locale: Option<String>,
 }
 
+pub mod admin;
 pub mod quiz;
 pub mod report;
 pub mod ws;

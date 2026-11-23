@@ -924,3 +924,105 @@ async fn reports_list_summary_exports_and_delete() {
     let res = send(&env.app, Request::get(&url).body(Body::empty()).unwrap()).await;
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn admins_search_suspend_and_read_the_audit_log() {
+    let env = crate::api_env_or_skip!("");
+    let admin = user(&env).await;
+    sqlx::query("UPDATE users SET role = 'admin' WHERE id = $1")
+        .bind(admin.id)
+        .execute(&env.db)
+        .await
+        .unwrap();
+    let target = user(&env).await;
+    let target_email: String = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(target.id)
+        .fetch_one(&env.db)
+        .await
+        .unwrap();
+
+    // Not an admin: the area does not exist.
+    let res = send(&env.app, target.req("GET", "/api/v1/admin/users", None)).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+    // Search by part of the email.
+    let q = &target_email[..12];
+    let res = send(
+        &env.app,
+        admin.req("GET", &format!("/api/v1/admin/users?q={q}"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let page = json_body(res).await;
+    assert_eq!(page["total"], 1, "{page}");
+    assert_eq!(page["items"][0]["email"], json!(target_email));
+    assert_eq!(page["items"][0]["status"], "active");
+
+    // An admin cannot suspend themselves or another admin.
+    let res = send(
+        &env.app,
+        admin.req(
+            "POST",
+            &format!("/api/v1/admin/users/{}/suspend", admin.id),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+
+    // Suspend: the user's next request is refused and their session ends.
+    let res = send(
+        &env.app,
+        admin.req(
+            "POST",
+            &format!("/api/v1/admin/users/{}/suspend", target.id),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let res = send(&env.app, target.req("GET", "/api/v1/me", None)).await;
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+    // Reactivate, then both actions are in the audit log, filterable by
+    // the target's email.
+    let res = send(
+        &env.app,
+        admin.req(
+            "POST",
+            &format!("/api/v1/admin/users/{}/reactivate", target.id),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NO_CONTENT);
+    let res = send(
+        &env.app,
+        admin.req("GET", &format!("/api/v1/admin/audit?user={q}"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let log = json_body(res).await;
+    let actions: Vec<&str> = log["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["action"].as_str().unwrap())
+        .collect();
+    assert_eq!(actions, ["user_reactivated", "user_suspended"], "{log}");
+    assert!(log["items"][0]["actorEmail"].as_str().is_some());
+
+    // Date filter: nothing tomorrow; a bad date is refused.
+    let res = send(
+        &env.app,
+        admin.req("GET", "/api/v1/admin/audit?from=2999-01-01", None),
+    )
+    .await;
+    assert_eq!(json_body(res).await["total"], 0);
+    let res = send(
+        &env.app,
+        admin.req("GET", "/api/v1/admin/audit?from=nope", None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}

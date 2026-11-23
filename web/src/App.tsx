@@ -10,6 +10,7 @@ import { Play } from "./game/Play";
 import { Report } from "./reports/Report";
 import { Reports } from "./reports/Reports";
 import { QuizList } from "./pages/QuizList";
+import { Admin } from "./admin/Admin";
 
 export default function App() {
   return (
@@ -55,6 +56,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Host />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="admin"
+          element={
+            <RequireAuth>
+              <Admin />
             </RequireAuth>
           }
         />

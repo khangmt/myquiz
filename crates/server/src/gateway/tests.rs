@@ -45,6 +45,7 @@ async fn env() -> Option<Env> {
     let hub = Hub::start(redis.clone(), &redis_url).await.unwrap();
     let service = GameService::new(store.clone(), db.clone(), hub);
     super::spawn_sweep(service.clone());
+    super::spawn_suspended_sweep(service.clone());
     let app = super::router(service);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap().to_string();
@@ -605,4 +606,38 @@ async fn host_and_players_on_different_servers() {
     assert_eq!(host.push("question:reveal").await["index"], 0);
     host.ok("host:end", json!({})).await;
     assert_eq!(p.push("game:ended").await["reason"], "host_ended");
+}
+
+#[tokio::test]
+async fn suspending_the_host_ends_their_game() {
+    let env = env_or_skip!();
+    let (pin, sid, session) = seed_game(&env).await;
+    let mut host = Bot::connect(&env.addr, Some(&sid)).await;
+    host.ok("host:attach", json!({ "pin": pin })).await;
+    let mut p = Bot::connect(&env.addr, None).await;
+    p.ok(
+        "player:join",
+        json!({ "pin": pin, "nickname": "Lan", "deviceId": "dev-s" }),
+    )
+    .await;
+
+    // FR-AD-01: an admin suspends the host.
+    sqlx::query(
+        "UPDATE users SET status = 'suspended' \
+         WHERE id = (SELECT host_id FROM game_sessions WHERE id = $1)",
+    )
+    .bind(session)
+    .execute(&env.db)
+    .await
+    .unwrap();
+    let ended = tokio::time::timeout(Duration::from_secs(20), p.push("game:ended"))
+        .await
+        .expect("game ended within the sweep interval");
+    assert_eq!(ended["reason"], "suspended");
+    let status: String = sqlx::query_scalar("SELECT status::text FROM game_sessions WHERE id = $1")
+        .bind(session)
+        .fetch_one(&env.db)
+        .await
+        .unwrap();
+    assert_eq!(status, "ended");
 }

@@ -2,6 +2,7 @@
 //!
 //! - `myquiz api`  serves REST, uploads and exports, and runs migrations at start.
 //! - `myquiz game` serves live games over WebSockets.
+//! - `myquiz admin <email>` makes an account an admin.
 //! - `myquiz migrate` applies database migrations and exits.
 //! - `myquiz healthcheck` is the Docker health check (no curl in the image).
 
@@ -34,6 +35,16 @@ enum Command {
     Api(Config),
     /// Serve live games over WebSockets.
     Game(Config),
+    /// Make an existing account an admin (or a normal user again with
+    /// --revoke). The person must have signed in once.
+    Admin {
+        #[arg(long, env = "DATABASE_URL")]
+        database_url: String,
+        /// The account's email.
+        email: String,
+        #[arg(long)]
+        revoke: bool,
+    },
     /// Apply database migrations and exit.
     Migrate {
         #[arg(long, env = "DATABASE_URL")]
@@ -68,6 +79,42 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Api(cfg) => serve(Role::Api, cfg).await,
         Command::Game(cfg) => serve(Role::Game, cfg).await,
+        Command::Admin {
+            database_url,
+            email,
+            revoke,
+        } => {
+            init_tracing(false);
+            let pool = sqlx::PgPool::connect(&database_url).await?;
+            let role = if revoke { "user" } else { "admin" };
+            let n = sqlx::query(
+                "UPDATE users SET role = $2::user_role WHERE lower(email) = lower($1) \
+                 AND deleted_at IS NULL",
+            )
+            .bind(&email)
+            .bind(role)
+            .execute(&pool)
+            .await?
+            .rows_affected();
+            if n == 0 {
+                anyhow::bail!("no account with email {email}; sign in once first");
+            }
+            sqlx::query(
+                "INSERT INTO audit_log (action, target_type, target_id, details) \
+                 SELECT $2, 'user', id::text, jsonb_build_object('email', email, 'via', 'cli') \
+                 FROM users WHERE lower(email) = lower($1)",
+            )
+            .bind(&email)
+            .bind(if revoke {
+                "admin_revoked"
+            } else {
+                "admin_granted"
+            })
+            .execute(&pool)
+            .await?;
+            println!("{email} is now {role}");
+            Ok(())
+        }
         Command::Migrate { database_url } => {
             init_tracing(false);
             let pool = sqlx::PgPool::connect(&database_url).await?;
@@ -128,6 +175,7 @@ async fn serve(role: Role, cfg: Config) -> anyhow::Result<()> {
         let store = live::LiveStore::with_countdown(state.redis.clone(), cfg.countdown_ms);
         let service = gateway::game::GameService::new(store, state.db.clone(), hub);
         gateway::spawn_sweep(service.clone());
+        gateway::spawn_suspended_sweep(service.clone());
         app = app.merge(gateway::router(service));
     }
     let listener = tokio::net::TcpListener::bind(&cfg.bind_addr).await?;

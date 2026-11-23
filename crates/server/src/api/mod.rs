@@ -1,5 +1,6 @@
 //! The REST API under `/api/v1` (design section 6). Served by `myquiz api`.
 
+pub mod admin;
 pub mod audit;
 pub mod auth;
 pub mod error;
@@ -96,6 +97,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/games/pin/{pin}", get(games::check_pin))
         .route("/quizzes/{id}/export", post(zip::export))
         .route("/exports/{token}", get(zip::download))
+        .route("/admin/users", get(admin::users))
+        .route("/admin/users/{id}/suspend", post(admin::suspend))
+        .route("/admin/users/{id}/reactivate", post(admin::reactivate))
+        .route("/admin/audit", get(admin::audit_log))
         .route("/sessions", get(reports::list))
         .route("/sessions/{id}", get(reports::get).delete(reports::delete))
         .route("/sessions/{id}/exports", post(reports::export))

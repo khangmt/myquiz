@@ -101,6 +101,44 @@ pub fn spawn_sweep(service: Arc<GameService>) {
     });
 }
 
+/// FR-AD-01: games hosted by a suspended user end within this long.
+const SUSPENDED_SWEEP_EVERY: Duration = Duration::from_secs(10);
+
+/// Ends running games whose host has been suspended. Every game server
+/// runs it; `end_game` makes sure each game ends once.
+pub fn spawn_suspended_sweep(service: Arc<GameService>) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(SUSPENDED_SWEEP_EVERY);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tick.tick().await;
+            let pins: Result<Vec<String>, _> = sqlx::query_scalar(
+                "SELECT s.pin FROM game_sessions s JOIN users u ON u.id = s.host_id \
+                 WHERE s.status <> 'ended' AND s.pin IS NOT NULL \
+                   AND (u.status = 'suspended' OR u.deleted_at IS NOT NULL)",
+            )
+            .fetch_all(&service.db)
+            .await;
+            match pins {
+                Ok(pins) => {
+                    for pin in pins {
+                        let pin = pin.trim().to_string();
+                        if let Err(e) = service
+                            .end_game(&pin, myquiz_protocol::ws::EndReason::Suspended)
+                            .await
+                        {
+                            tracing::warn!(error = %e, pin, "ending a suspended host's game failed");
+                        } else {
+                            tracing::info!(pin, "ended a game of a suspended host");
+                        }
+                    }
+                }
+                Err(e) => tracing::warn!(error = %e, "suspended-host sweep failed"),
+            }
+        }
+    });
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Who {
     Anonymous,
