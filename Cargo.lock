@@ -1669,7 +1669,7 @@ dependencies = [
  "myquiz-bundle",
  "myquiz-engine",
  "myquiz-protocol",
- "rand 0.9.5",
+ "rand 0.10.4",
  "reqwest",
  "rust_xlsxwriter",
  "serde",
