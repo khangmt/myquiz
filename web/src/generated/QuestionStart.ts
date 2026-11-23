@@ -6,11 +6,11 @@ export type QuestionStart = {
 /**
  * Server clock, ms since the Unix epoch: when options show.
  */
-startsAt: bigint, 
+startsAt: number, 
 /**
  * Server clock: when answers stop being accepted.
  */
-endsAt: bigint, index: number, total: number, type: QuestionKind, text: string, media: string | null, options: Array<PublicOption>, 
+endsAt: number, index: number, total: number, type: QuestionKind, text: string, media: string | null, options: Array<PublicOption>, 
 /**
  * Seconds.
  */

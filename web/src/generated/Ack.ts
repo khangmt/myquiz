@@ -7,4 +7,4 @@ export type Ack = {
 /**
  * Always "ack".
  */
-t: string, id: bigint, ok: boolean, d: unknown, code: string | null, };
+t: string, id: number, ok: boolean, d: unknown, code: string | null, };

@@ -3,4 +3,4 @@
 /**
  * One row of `GET /quizzes`.
  */
-export type QuizSummary = { id: string, title: string, status: string, visibility: string, questionCount: bigint, updatedAt: string, expiresAt: string, };
+export type QuizSummary = { id: string, title: string, status: string, visibility: string, questionCount: number, updatedAt: string, expiresAt: string, };

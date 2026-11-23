@@ -1,5 +1,115 @@
 {
-  "app": { "name": "myquiz", "tagline": "Create quizzes, play live and download reports." },
-  "home": { "join": "Join a game", "pinPlaceholder": "Game PIN", "signIn": "Sign in with Google" },
-  "language": "Language"
+  "app": {
+    "name": "myquiz",
+    "tagline": "Create quizzes, play live and download reports."
+  },
+  "home": {
+    "join": "Join a game",
+    "pinPlaceholder": "Game PIN",
+    "signIn": "Sign in with Google"
+  },
+  "language": "Language",
+  "nav": {
+    "myQuizzes": "My quizzes",
+    "signIn": "Sign in",
+    "signOut": "Sign out"
+  },
+  "common": {
+    "loading": "Loading…",
+    "previous": "Previous",
+    "next": "Next",
+    "pageOf": "Page {{page}} of {{pages}}",
+    "comingSoon": "This screen is coming soon."
+  },
+  "login": {
+    "title": "Sign in",
+    "intro": "Sign in to create and host games. Players don't need an account."
+  },
+  "quizzes": {
+    "title": "My quizzes",
+    "new": "New quiz",
+    "untitled": "Untitled quiz",
+    "upload": "Import zip",
+    "uploading": "Importing…",
+    "imported": "The quiz was imported as a private draft.",
+    "importFailed": "The zip could not be imported. Fix these problems and try again:",
+    "exportBlocked": "\"{{title}}\" can't be downloaded yet: fix these so the zip can be imported again.",
+    "retention": "Quizzes are deleted from the server 3 weeks after they were last edited or played. Download a zip to keep a copy and import it again any time.",
+    "template": "Download the template",
+    "search": "Search by title",
+    "empty": "You have no quizzes yet.",
+    "noMatch": "No quizzes match.",
+    "questions_one": "{{count}} question",
+    "questions_other": "{{count}} questions",
+    "status": {
+      "draft": "Draft",
+      "published": "Published"
+    },
+    "deletedOn": "deleted on {{date}}",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "download": "Download zip",
+    "duplicate": "Duplicate",
+    "delete": "Delete",
+    "confirmDelete": "Delete \"{{title}}\"? An administrator can restore it within 30 days."
+  },
+  "problems": {
+    "question": "question {{n}}",
+    "TITLE_LENGTH": "The title must be 1 to 120 characters.",
+    "NO_QUESTIONS": "Add at least one question.",
+    "QUESTION_TEXT_LENGTH": "Question text must be 1 to 300 characters.",
+    "TIME_LIMIT": "The time limit must be 5 to 240 seconds.",
+    "POINTS": "Points must be 0, 1000 or 2000.",
+    "OPTION_COUNT": "A choice question needs 2 to 6 options.",
+    "TRUE_FALSE_OPTION_COUNT": "A true/false question needs exactly 2 options.",
+    "OPTION_TEXT_LENGTH": "Each option must be 1 to 120 characters.",
+    "DUPLICATE_OPTION_ID": "An option is duplicated.",
+    "NO_CORRECT_OPTION": "Mark at least one option as correct.",
+    "TOO_MANY_CORRECT_OPTIONS": "This question type allows exactly one correct option.",
+    "ACCEPTED_ANSWER_COUNT": "Fill-in-the-blank needs 1 to 5 accepted answers.",
+    "ACCEPTED_ANSWER_LENGTH": "Accepted answers must be 1 to 50 characters.",
+    "BLANK_MARKER": "Fill-in-the-blank text needs exactly one blank (___).",
+    "UNEXPECTED_OPTIONS": "Fill-in-the-blank questions have no options.",
+    "DESCRIPTION_LENGTH": "The description can be at most 1000 characters.",
+    "ALT_TEXT_LENGTH": "Image descriptions can be at most 300 characters.",
+    "MEDIA_NOT_FOUND": "The image was not found.",
+    "NOT_A_ZIP": "The file is not a valid zip.",
+    "TOO_MANY_FILES": "The zip has too many files (at most 250).",
+    "DUPLICATE": "The zip contains duplicate file names.",
+    "UNSAFE_PATH": "The zip contains an unsafe path.",
+    "SYMLINK": "The zip contains a symbolic link.",
+    "ENCRYPTED": "The zip is password protected.",
+    "UNSUPPORTED_COMPRESSION": "The zip uses an unsupported compression method.",
+    "NAME_NOT_ALLOWED": "File name not allowed; images go in the media folder.",
+    "COMPRESSION_RATIO": "A file is compressed suspiciously well.",
+    "TOO_LARGE": "The zip is too large unpacked (at most 100 MB).",
+    "FILE_TOO_LARGE": "The file is too large.",
+    "MISSING_QUIZ_JSON": "quiz.json is missing.",
+    "INVALID_JSON": "quiz.json is not valid JSON.",
+    "BAD_FORMAT": "quiz.json is not a myquiz file.",
+    "UNSUPPORTED_VERSION": "The file is from a newer version than this server supports.",
+    "MISSING_IMAGE": "An image named in quiz.json is missing.",
+    "NOT_AN_IMAGE": "Not a JPG, PNG or WebP image.",
+    "IMAGE_TOO_BIG": "The image dimensions are too large.",
+    "BAD_IMAGE_PATH": "The image path is not valid."
+  },
+  "errors": {
+    "INTERNAL": "Something went wrong. Please try again.",
+    "LOGIN_FAILED": "Sign-in failed.",
+    "GOOGLE_DENIED": "You cancelled the Google sign-in.",
+    "LOGIN_EXPIRED": "The sign-in took too long; please try again.",
+    "GOOGLE_UNAVAILABLE": "Google could not be reached; try again later.",
+    "GOOGLE_BAD_TOKEN": "Google sent back something unexpected; please try again.",
+    "EMAIL_UNVERIFIED": "Your Google email address is not verified.",
+    "DOMAIN_NOT_ALLOWED": "This email address is not allowed to sign in.",
+    "ACCOUNT_SUSPENDED": "This account is suspended.",
+    "AUTH_NOT_CONFIGURED": "Google sign-in is not set up yet.",
+    "UNAUTHENTICATED": "Please sign in.",
+    "CSRF_INVALID": "Your session changed; please reload the page.",
+    "QUIZ_NOT_FOUND": "Quiz not found.",
+    "RATE_LIMITED": "Too many requests; try again in a few minutes.",
+    "IMPORT_BUSY": "The server is busy importing; try again in a minute.",
+    "FILE_TOO_LARGE": "The file is too large (at most 25 MB).",
+    "LINK_EXPIRED": "The download link has expired."
+  }
 }

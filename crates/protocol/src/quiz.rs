@@ -90,6 +90,7 @@ pub struct QuizSummary {
     pub title: String,
     pub status: String,
     pub visibility: String,
+    #[ts(type = "number")]
     pub question_count: i64,
     pub updated_at: String,
     pub expires_at: String,
@@ -103,6 +104,7 @@ pub struct QuizPage {
     /// 1-based.
     pub page: u32,
     pub page_size: u32,
+    #[ts(type = "number")]
     pub total: i64,
 }
 

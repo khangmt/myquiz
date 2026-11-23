@@ -1,5 +1,113 @@
 {
-  "app": { "name": "myquiz", "tagline": "Tạo câu đố, chơi trực tiếp và tải báo cáo." },
-  "home": { "join": "Tham gia trò chơi", "pinPlaceholder": "Mã PIN", "signIn": "Đăng nhập bằng Google" },
-  "language": "Ngôn ngữ"
+  "app": {
+    "name": "myquiz",
+    "tagline": "Tạo câu đố, chơi trực tiếp và tải báo cáo."
+  },
+  "home": {
+    "join": "Tham gia trò chơi",
+    "pinPlaceholder": "Mã PIN",
+    "signIn": "Đăng nhập bằng Google"
+  },
+  "language": "Ngôn ngữ",
+  "nav": {
+    "myQuizzes": "Bộ câu hỏi của tôi",
+    "signIn": "Đăng nhập",
+    "signOut": "Đăng xuất"
+  },
+  "common": {
+    "loading": "Đang tải…",
+    "previous": "Trước",
+    "next": "Sau",
+    "pageOf": "Trang {{page}}/{{pages}}",
+    "comingSoon": "Màn hình này sắp có."
+  },
+  "login": {
+    "title": "Đăng nhập",
+    "intro": "Đăng nhập để tạo và tổ chức trò chơi. Người chơi không cần đăng nhập."
+  },
+  "quizzes": {
+    "title": "Bộ câu hỏi của tôi",
+    "new": "Tạo bộ câu hỏi",
+    "untitled": "Bộ câu hỏi chưa đặt tên",
+    "upload": "Nhập tệp zip",
+    "uploading": "Đang nhập…",
+    "imported": "Đã nhập bộ câu hỏi thành bản nháp riêng tư.",
+    "importFailed": "Không thể nhập tệp zip. Hãy sửa các lỗi sau rồi thử lại:",
+    "exportBlocked": "Chưa thể tải \"{{title}}\": hãy sửa các lỗi sau để tệp zip có thể nhập lại được.",
+    "retention": "Bộ câu hỏi bị xoá khỏi máy chủ 3 tuần sau lần sửa hoặc lần chơi gần nhất. Hãy tải tệp zip để giữ lại và nhập lại khi cần.",
+    "template": "Tải tệp mẫu",
+    "search": "Tìm theo tên",
+    "empty": "Bạn chưa có bộ câu hỏi nào.",
+    "noMatch": "Không có bộ câu hỏi phù hợp.",
+    "questions_other": "{{count}} câu hỏi",
+    "status": {
+      "draft": "Bản nháp",
+      "published": "Đã xuất bản"
+    },
+    "deletedOn": "xoá vào {{date}}",
+    "daysLeft_other": "còn {{count}} ngày",
+    "download": "Tải zip",
+    "duplicate": "Nhân bản",
+    "delete": "Xoá",
+    "confirmDelete": "Xoá \"{{title}}\"? Bạn có thể khôi phục trong 30 ngày bằng cách liên hệ quản trị viên."
+  },
+  "problems": {
+    "question": "câu {{n}}",
+    "TITLE_LENGTH": "Tên phải có 1 đến 120 ký tự.",
+    "NO_QUESTIONS": "Cần ít nhất một câu hỏi.",
+    "QUESTION_TEXT_LENGTH": "Nội dung câu hỏi phải có 1 đến 300 ký tự.",
+    "TIME_LIMIT": "Thời gian phải từ 5 đến 240 giây.",
+    "POINTS": "Điểm phải là 0, 1000 hoặc 2000.",
+    "OPTION_COUNT": "Câu trắc nghiệm cần 2 đến 6 lựa chọn.",
+    "TRUE_FALSE_OPTION_COUNT": "Câu đúng/sai cần đúng 2 lựa chọn.",
+    "OPTION_TEXT_LENGTH": "Mỗi lựa chọn phải có 1 đến 120 ký tự.",
+    "DUPLICATE_OPTION_ID": "Lựa chọn bị trùng.",
+    "NO_CORRECT_OPTION": "Hãy đánh dấu ít nhất một đáp án đúng.",
+    "TOO_MANY_CORRECT_OPTIONS": "Loại câu này chỉ có đúng một đáp án đúng.",
+    "ACCEPTED_ANSWER_COUNT": "Câu điền từ cần 1 đến 5 đáp án chấp nhận.",
+    "ACCEPTED_ANSWER_LENGTH": "Đáp án chấp nhận phải có 1 đến 50 ký tự.",
+    "BLANK_MARKER": "Câu điền từ phải có đúng một chỗ trống (___).",
+    "UNEXPECTED_OPTIONS": "Câu điền từ không có lựa chọn.",
+    "DESCRIPTION_LENGTH": "Mô tả tối đa 1000 ký tự.",
+    "ALT_TEXT_LENGTH": "Mô tả ảnh tối đa 300 ký tự.",
+    "MEDIA_NOT_FOUND": "Không tìm thấy ảnh.",
+    "NOT_A_ZIP": "Tệp không phải là tệp zip hợp lệ.",
+    "TOO_MANY_FILES": "Tệp zip có quá nhiều tệp (tối đa 250).",
+    "DUPLICATE": "Tệp zip có tên tệp bị trùng.",
+    "UNSAFE_PATH": "Tệp zip có đường dẫn không an toàn.",
+    "SYMLINK": "Tệp zip chứa liên kết tượng trưng.",
+    "ENCRYPTED": "Tệp zip được đặt mật khẩu.",
+    "UNSUPPORTED_COMPRESSION": "Tệp zip dùng kiểu nén không hỗ trợ.",
+    "NAME_NOT_ALLOWED": "Tên tệp không được phép; ảnh phải nằm trong thư mục media.",
+    "COMPRESSION_RATIO": "Tệp nén bất thường (tỉ lệ nén quá cao).",
+    "TOO_LARGE": "Tệp zip giải nén quá lớn (tối đa 100 MB).",
+    "FILE_TOO_LARGE": "Tệp quá lớn.",
+    "MISSING_QUIZ_JSON": "Thiếu tệp quiz.json.",
+    "INVALID_JSON": "quiz.json không đúng định dạng JSON.",
+    "BAD_FORMAT": "quiz.json không phải của myquiz.",
+    "UNSUPPORTED_VERSION": "Phiên bản tệp mới hơn máy chủ hỗ trợ.",
+    "MISSING_IMAGE": "Thiếu ảnh được nhắc tới trong quiz.json.",
+    "NOT_AN_IMAGE": "Tệp không phải ảnh JPG, PNG hoặc WebP.",
+    "IMAGE_TOO_BIG": "Ảnh có kích thước quá lớn.",
+    "BAD_IMAGE_PATH": "Đường dẫn ảnh không hợp lệ."
+  },
+  "errors": {
+    "INTERNAL": "Đã có lỗi. Vui lòng thử lại.",
+    "LOGIN_FAILED": "Đăng nhập không thành công.",
+    "GOOGLE_DENIED": "Bạn đã huỷ đăng nhập Google.",
+    "LOGIN_EXPIRED": "Phiên đăng nhập đã hết hạn, hãy thử lại.",
+    "GOOGLE_UNAVAILABLE": "Không kết nối được Google, hãy thử lại sau.",
+    "GOOGLE_BAD_TOKEN": "Google trả về thông tin không hợp lệ, hãy thử lại.",
+    "EMAIL_UNVERIFIED": "Email Google của bạn chưa được xác minh.",
+    "DOMAIN_NOT_ALLOWED": "Tài khoản email này không được phép đăng nhập.",
+    "ACCOUNT_SUSPENDED": "Tài khoản đã bị tạm khoá.",
+    "AUTH_NOT_CONFIGURED": "Đăng nhập Google chưa được cấu hình.",
+    "UNAUTHENTICATED": "Hãy đăng nhập.",
+    "CSRF_INVALID": "Phiên làm việc đã thay đổi, hãy tải lại trang.",
+    "QUIZ_NOT_FOUND": "Không tìm thấy bộ câu hỏi.",
+    "RATE_LIMITED": "Bạn thao tác quá nhanh, hãy thử lại sau ít phút.",
+    "IMPORT_BUSY": "Máy chủ đang bận nhập tệp, hãy thử lại sau một phút.",
+    "FILE_TOO_LARGE": "Tệp quá lớn (tối đa 25 MB).",
+    "LINK_EXPIRED": "Liên kết tải đã hết hạn."
+  }
 }

@@ -5,4 +5,4 @@ export type QuizPage = { items: Array<QuizSummary>,
 /**
  * 1-based.
  */
-page: number, pageSize: number, total: bigint, };
+page: number, pageSize: number, total: number, };
