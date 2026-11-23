@@ -12,7 +12,8 @@
   "nav": {
     "myQuizzes": "Bộ câu hỏi của tôi",
     "signIn": "Đăng nhập",
-    "signOut": "Đăng xuất"
+    "signOut": "Đăng xuất",
+    "reports": "Báo cáo"
   },
   "common": {
     "loading": "Đang tải…",
@@ -112,7 +113,8 @@
     "FILE_TOO_LARGE_IMAGE": "Ảnh quá lớn (tối đa 5 MB).",
     "VERSION_CONFLICT": "Bộ câu hỏi vừa được sửa ở nơi khác; thay đổi ở đây chưa được lưu.",
     "QUIZ_NOT_PUBLISHED": "Hãy xuất bản bộ câu hỏi trước khi tổ chức trò chơi.",
-    "CAPACITY_FULL": "Máy chủ đang có quá nhiều trò chơi; hãy thử lại sau vài phút."
+    "CAPACITY_FULL": "Máy chủ đang có quá nhiều trò chơi; hãy thử lại sau vài phút.",
+    "SESSION_NOT_FOUND": "Không tìm thấy báo cáo."
   },
   "editor": {
     "saved": "Đã lưu",
@@ -235,5 +237,35 @@
       "DISCONNECTED": "Mất kết nối, hãy thử lại.",
       "TIMEOUT": "Máy chủ không phản hồi, hãy thử lại."
     }
+  },
+  "reports": {
+    "title": "Báo cáo trò chơi",
+    "empty": "Chưa có trò chơi nào. Tổ chức một trò chơi để xem báo cáo ở đây.",
+    "date": "Thời gian",
+    "quiz": "Bộ câu hỏi",
+    "players": "Người chơi",
+    "averageScore": "Điểm trung bình",
+    "notFinished": "chưa kết thúc",
+    "accuracy": "Tỉ lệ đúng",
+    "averageTime": "Thời gian TB",
+    "participation": "{{value}} người chơi đã trả lời ít nhất một câu.",
+    "questions": "Câu hỏi",
+    "question": "Câu hỏi",
+    "answered": "Đã trả lời",
+    "correct": "Đúng",
+    "hard": "Khó",
+    "playerResults": "Kết quả người chơi",
+    "rank": "Hạng",
+    "nickname": "Biệt danh",
+    "score": "Điểm",
+    "correctCount": "Câu đúng",
+    "removed": "Đã mời ra",
+    "noAnswer": "Không trả lời",
+    "downloadXlsx": "Tải Excel",
+    "downloadCsv": "Tải CSV (từng câu trả lời)",
+    "downloadCsvSummary": "Tải CSV (tổng hợp)",
+    "delete": "Xoá báo cáo",
+    "confirmDelete": "Xoá vĩnh viễn báo cáo này? Không thể hoàn tác.",
+    "view": "Xem báo cáo"
   }
 }

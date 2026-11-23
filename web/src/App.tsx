@@ -7,6 +7,8 @@ import { Editor } from "./pages/Editor";
 import { Placeholder } from "./pages/Placeholder";
 import { Host } from "./game/Host";
 import { Play } from "./game/Play";
+import { Report } from "./reports/Report";
+import { Reports } from "./reports/Reports";
 import { QuizList } from "./pages/QuizList";
 
 export default function App() {
@@ -28,6 +30,22 @@ export default function App() {
           element={
             <RequireAuth>
               <Editor />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="reports"
+          element={
+            <RequireAuth>
+              <Reports />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="reports/:id"
+          element={
+            <RequireAuth>
+              <Report />
             </RequireAuth>
           }
         />

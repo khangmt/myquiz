@@ -122,6 +122,10 @@ pub async fn download(
         )
     };
     let subject = signed::verify(&state.auth.app_secret, &token).ok_or_else(gone)?;
+    // One link endpoint serves quiz zips and game reports (SEC-23).
+    if let Some(res) = super::reports::serve(&state.app.db, &subject).await? {
+        return Ok(res);
+    }
     let id: Uuid = subject
         .strip_prefix("quiz:")
         .and_then(|s| s.parse().ok())

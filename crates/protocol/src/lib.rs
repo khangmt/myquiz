@@ -58,4 +58,5 @@ pub struct UpdateMe {
 }
 
 pub mod quiz;
+pub mod report;
 pub mod ws;

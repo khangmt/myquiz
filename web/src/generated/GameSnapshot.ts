@@ -16,4 +16,9 @@ question: QuestionStart | null,
 /**
  * For players: their own standing.
  */
-me: MyStanding | null, };
+me: MyStanding | null, 
+/**
+ * For the host: the game's id, which names its report
+ * (`/reports/<id>`). Null for players.
+ */
+reportId: string | null, };

@@ -79,6 +79,7 @@ impl GameService {
     pub async fn snapshot(&self, pin: &str, me: Option<&str>) -> Result<GameSnapshot> {
         let meta = self.store.meta(pin).await?.context("no such game")?;
         let players = self.store.players(pin).await?;
+        let for_host = me.is_none();
         let question = match meta.state {
             GameState::Question { index } => {
                 let quiz = self.quiz(pin).await?;
@@ -118,6 +119,7 @@ impl GameService {
             locked: meta.locked,
             players: lobby_list(&players),
             question,
+            report_id: for_host.then(|| meta.session.clone()),
             me,
         })
     }
