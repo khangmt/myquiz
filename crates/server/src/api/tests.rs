@@ -44,13 +44,14 @@ async fn fake_token(
     ))
 }
 
-struct Env {
-    app: Router,
+pub(super) struct Env {
+    pub app: Router,
     google: FakeGoogle,
-    db: sqlx::PgPool,
+    pub db: sqlx::PgPool,
+    pub redis: fred::prelude::Pool,
 }
 
-async fn env(domains: &str) -> Option<Env> {
+pub(super) async fn env(domains: &str) -> Option<Env> {
     let database_url = std::env::var("DATABASE_URL").ok()?;
     let redis_url = std::env::var("REDIS_URL").ok()?;
 
@@ -74,25 +75,30 @@ async fn env(domains: &str) -> Option<Env> {
         redis_url,
         db_max_connections: 2,
         countdown_ms: 3000,
-        auth: auth.clone(),
+        retention_days: 21,
+        max_active_games: 200,
+        auth,
         log_json: false,
     };
     let app_state = AppState::connect(crate::Role::Api, &cfg).await.unwrap();
     crate::MIGRATOR.run(&app_state.db).await.unwrap();
     let db = app_state.db.clone();
+    let redis = app_state.redis.clone();
     // The sandbox and some CI runners set HTTPS_PROXY; the fake is local.
-    let mut state = ApiState::new(app_state, auth).unwrap();
+    let mut state = ApiState::new(app_state, &cfg).unwrap();
     state.http = reqwest::Client::builder().no_proxy().build().unwrap();
     Some(Env {
         app: router(state),
         google,
         db,
+        redis,
     })
 }
 
-macro_rules! env_or_skip {
+#[macro_export]
+macro_rules! api_env_or_skip {
     ($domains:expr) => {
-        match env($domains).await {
+        match $crate::api::tests::env($domains).await {
             Some(e) => e,
             None => {
                 eprintln!("skipped: DATABASE_URL and REDIS_URL not set");
@@ -127,11 +133,11 @@ fn location(res: &Response) -> String {
         .to_string()
 }
 
-async fn send(app: &Router, req: Request<Body>) -> Response {
+pub(super) async fn send(app: &Router, req: Request<Body>) -> Response {
     app.clone().oneshot(req).await.unwrap()
 }
 
-async fn json_body(res: Response) -> Value {
+pub(super) async fn json_body(res: Response) -> Value {
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).unwrap_or(Value::Null)
 }
@@ -194,13 +200,13 @@ fn claims(sub: &str, email: &str) -> Value {
     })
 }
 
-fn unique() -> String {
+pub(super) fn unique() -> String {
     Uuid::new_v4().simple().to_string()
 }
 
 #[tokio::test]
 async fn google_sign_in_session_csrf_and_logout() {
-    let env = env_or_skip!("");
+    let env = api_env_or_skip!("");
     let sub = unique();
     let email = format!("lan-{sub}@uit.edu.vn");
     let login = sign_in(&env, claims(&sub, &email)).await;
@@ -307,7 +313,7 @@ async fn google_sign_in_session_csrf_and_logout() {
 
 #[tokio::test]
 async fn refusals_redirect_to_the_login_page() {
-    let env = env_or_skip!("uit.edu.vn");
+    let env = api_env_or_skip!("uit.edu.vn");
     let refused = |l: &Login| {
         assert_eq!(l.callback.status(), StatusCode::SEE_OTHER);
         assert!(set_cookie(&l.callback, "sid").is_none());
@@ -394,7 +400,7 @@ async fn refusals_redirect_to_the_login_page() {
 
 #[tokio::test]
 async fn a_used_state_cannot_be_replayed() {
-    let env = env_or_skip!("");
+    let env = api_env_or_skip!("");
     let start = send(
         &env.app,
         Request::get("/api/v1/auth/google")
@@ -427,7 +433,7 @@ async fn a_used_state_cannot_be_replayed() {
 
 #[tokio::test]
 async fn me_needs_a_session() {
-    let env = env_or_skip!("");
+    let env = api_env_or_skip!("");
     for cookie in ["", "sid=nothex", &format!("sid={}", "a".repeat(64))] {
         let res = send(
             &env.app,

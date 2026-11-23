@@ -28,6 +28,16 @@ pub struct Config {
     #[arg(long, env = "LOG_JSON", default_value_t = false)]
     pub log_json: bool,
 
+    /// Quizzes are deleted this many days after they were last edited or
+    /// played (FR-QZ-18). The API reports the date as expiresAt.
+    #[arg(long, env = "RETENTION_DAYS", default_value_t = 21)]
+    pub retention_days: u32,
+
+    /// New games are refused with 503 CAPACITY_FULL above this many running
+    /// games (NFR-03). Set to the load-tested figure.
+    #[arg(long, env = "MAX_ACTIVE_GAMES", default_value_t = 200)]
+    pub max_active_games: u32,
+
     #[command(flatten)]
     pub auth: AuthSettings,
 }

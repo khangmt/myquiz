@@ -558,6 +558,14 @@ impl GameService {
         .bind(ranked.len() as i32)
         .execute(&mut *tx)
         .await?;
+        // Playing a quiz restarts its 3-week retention clock (FR-QZ-18).
+        sqlx::query(
+            "UPDATE quizzes SET last_used_at = now() \
+             WHERE id = (SELECT quiz_id FROM game_sessions WHERE id = $1)",
+        )
+        .bind(parse_uuid(&meta.session)?)
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
 
         self.hub

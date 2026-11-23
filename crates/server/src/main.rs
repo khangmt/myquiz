@@ -119,7 +119,7 @@ async fn serve(role: Role, cfg: Config) -> anyhow::Result<()> {
 
     let mut app = routes::router(state.clone());
     if role == Role::Api {
-        let api_state = api::ApiState::new(state.clone(), cfg.auth.clone())?;
+        let api_state = api::ApiState::new(state.clone(), &cfg)?;
         app = app.merge(api::router(api_state));
     }
     if role == Role::Game {
