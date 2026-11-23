@@ -1026,3 +1026,61 @@ async fn admins_search_suspend_and_read_the_audit_log() {
     .await;
     assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
+
+/// SEC-29 authorization review, as a test: every endpoint that is not
+/// public refuses a request without a session, and every change refuses a
+/// request without the CSRF token. API answers carry their own security
+/// headers (SEC-26).
+#[tokio::test]
+async fn every_private_endpoint_needs_a_session_and_csrf() {
+    let env = crate::api_env_or_skip!("");
+    let lan = user(&env).await;
+    let id = Uuid::new_v4();
+    let private: Vec<(&str, String)> = vec![
+        ("GET", "/api/v1/me".into()),
+        ("PATCH", "/api/v1/me".into()),
+        ("POST", "/api/v1/auth/logout".into()),
+        ("GET", "/api/v1/quizzes".into()),
+        ("POST", "/api/v1/quizzes".into()),
+        ("GET", "/api/v1/quizzes/expiring".into()),
+        ("GET", format!("/api/v1/quizzes/{id}")),
+        ("PUT", format!("/api/v1/quizzes/{id}")),
+        ("DELETE", format!("/api/v1/quizzes/{id}")),
+        ("POST", format!("/api/v1/quizzes/{id}/duplicate")),
+        ("POST", format!("/api/v1/quizzes/{id}/publish")),
+        ("POST", format!("/api/v1/quizzes/{id}/export")),
+        ("POST", "/api/v1/quizzes/import".into()),
+        ("POST", "/api/v1/media".into()),
+        ("POST", "/api/v1/games".into()),
+        ("GET", "/api/v1/sessions".into()),
+        ("GET", format!("/api/v1/sessions/{id}")),
+        ("DELETE", format!("/api/v1/sessions/{id}")),
+        ("POST", format!("/api/v1/sessions/{id}/exports")),
+        ("GET", "/api/v1/admin/users".into()),
+        ("POST", format!("/api/v1/admin/users/{id}/suspend")),
+        ("POST", format!("/api/v1/admin/users/{id}/reactivate")),
+        ("GET", "/api/v1/admin/audit".into()),
+    ];
+    for (method, uri) in &private {
+        let req = Request::builder()
+            .method(*method)
+            .uri(uri)
+            .body(Body::empty())
+            .unwrap();
+        let res = send(&env.app, req).await;
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "{method} {uri}");
+        assert_eq!(res.headers()["x-content-type-options"], "nosniff");
+        assert_eq!(res.headers()["cache-control"], "no-store");
+
+        if *method != "GET" {
+            let mut req = lan.req(method, uri, None);
+            req.headers_mut().remove("X-CSRF-Token");
+            let res = send(&env.app, req).await;
+            assert_eq!(
+                res.status(),
+                StatusCode::FORBIDDEN,
+                "{method} {uri} without CSRF"
+            );
+        }
+    }
+}

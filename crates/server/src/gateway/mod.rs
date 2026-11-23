@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
-use axum::http::HeaderMap;
-use axum::response::Response;
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
 use myquiz_protocol::ws::*;
@@ -31,15 +31,70 @@ const PING_EVERY: Duration = Duration::from_secs(25);
 const IDLE_LIMIT: Duration = Duration::from_secs(60);
 const SWEEP_EVERY: Duration = Duration::from_millis(250);
 
-pub fn router(service: Arc<GameService>) -> Router {
-    Router::new().route("/ws", get(upgrade)).with_state(service)
+/// Web origins allowed to open a game socket besides the page's own host
+/// (PUBLIC_URL and JOIN_URL), as `scheme://host[:port]`, lower case.
+#[derive(Clone, Default)]
+pub struct AllowedOrigins(Arc<Vec<String>>);
+
+impl AllowedOrigins {
+    pub fn new<'a>(urls: impl IntoIterator<Item = &'a str>) -> Self {
+        AllowedOrigins(Arc::new(urls.into_iter().filter_map(origin_of).collect()))
+    }
+}
+
+/// `https://Quiz.example.edu.vn/path` -> `https://quiz.example.edu.vn`.
+fn origin_of(url: &str) -> Option<String> {
+    let url = url.trim().to_ascii_lowercase();
+    let (scheme, rest) = url.split_once("://")?;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    (!authority.is_empty()).then(|| format!("{scheme}://{authority}"))
+}
+
+/// Cross-site WebSocket hijacking guard (SEC-26). Browsers always send
+/// `Origin` on a socket, and cookies ride along, so a page on another site
+/// (even another subdomain of the same university) could otherwise drive a
+/// signed-in host's game. Clients without `Origin` are not browsers and
+/// carry no cookies of a victim, so they pass.
+fn origin_allowed(headers: &HeaderMap, allowed: &AllowedOrigins) -> bool {
+    let Some(origin) = headers.get(header::ORIGIN) else {
+        return true;
+    };
+    let Some(origin) = origin.to_str().ok().and_then(origin_of) else {
+        return false;
+    };
+    if allowed.0.contains(&origin) {
+        return true;
+    }
+    // Same origin as the page that asked: Caddy and the Vite proxy keep the
+    // browser's Host header (Caddy also adds X-Forwarded-Host).
+    let authority = origin.split_once("://").map_or("", |(_, a)| a);
+    [header::HOST.as_str(), "x-forwarded-host"]
+        .iter()
+        .filter_map(|h| headers.get(*h)?.to_str().ok())
+        .any(|h| h.trim().eq_ignore_ascii_case(authority))
+}
+
+#[derive(Clone)]
+struct WsState {
+    service: Arc<GameService>,
+    origins: AllowedOrigins,
+}
+
+pub fn router(service: Arc<GameService>, origins: AllowedOrigins) -> Router {
+    Router::new()
+        .route("/ws", get(upgrade))
+        .with_state(WsState { service, origins })
 }
 
 async fn upgrade(
-    State(service): State<Arc<GameService>>,
+    State(WsState { service, origins }): State<WsState>,
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
+    if !origin_allowed(&headers, &origins) {
+        tracing::warn!(origin = ?headers.get(header::ORIGIN), "socket from another site refused");
+        return StatusCode::FORBIDDEN.into_response();
+    }
     // The login cookie identifies hosts and signed-in players. The session
     // itself is created by the auth module (SEC-04).
     let sid = cookie(&headers, "sid");
@@ -436,3 +491,53 @@ impl Connection {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod origin_tests {
+    use super::*;
+
+    fn headers(pairs: &[(&str, &str)]) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        for (k, v) in pairs {
+            h.insert(
+                axum::http::HeaderName::from_bytes(k.as_bytes()).unwrap(),
+                v.parse().unwrap(),
+            );
+        }
+        h
+    }
+
+    #[test]
+    fn sockets_from_other_sites_are_refused() {
+        let allowed = AllowedOrigins::new(["https://Quiz.UIT.edu.vn/", "http://192.168.1.20:8080"]);
+        let ok = |h: &[(&str, &str)]| origin_allowed(&headers(h), &allowed);
+        // Not a browser: no Origin, no victim cookies.
+        assert!(ok(&[("host", "game:8080")]));
+        // PUBLIC_URL and JOIN_URL, whatever Host the proxy passes on.
+        assert!(ok(&[
+            ("origin", "https://quiz.uit.edu.vn"),
+            ("host", "game:8080")
+        ]));
+        assert!(ok(&[("origin", "http://192.168.1.20:8080"), ("host", "x")]));
+        // Same origin as the page (Vite in development, Caddy's forwarded host).
+        assert!(ok(&[
+            ("origin", "http://localhost:5173"),
+            ("host", "localhost:5173")
+        ]));
+        assert!(ok(&[
+            ("origin", "https://other.example"),
+            ("host", "game:8080"),
+            ("x-forwarded-host", "other.example"),
+        ]));
+        // Another subdomain, another port, another scheme's host, garbage.
+        assert!(!ok(&[
+            ("origin", "https://evil.uit.edu.vn"),
+            ("host", "quiz.uit.edu.vn")
+        ]));
+        assert!(!ok(&[
+            ("origin", "http://192.168.1.20:9999"),
+            ("host", "game:8080")
+        ]));
+        assert!(!ok(&[("origin", "null"), ("host", "game:8080")]));
+    }
+}

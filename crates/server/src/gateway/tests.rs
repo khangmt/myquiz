@@ -46,7 +46,7 @@ async fn env() -> Option<Env> {
     let service = GameService::new(store.clone(), db.clone(), hub);
     super::spawn_sweep(service.clone());
     super::spawn_suspended_sweep(service.clone());
-    let app = super::router(service);
+    let app = super::router(service, super::AllowedOrigins::default());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap().to_string();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -146,6 +146,8 @@ struct Bot {
 
 impl Bot {
     async fn connect(addr: &str, sid: Option<&str>) -> Bot {
+        // A local test server: plain ws is fine here.
+        // nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket
         let mut req = format!("ws://{addr}/ws").into_client_request().unwrap();
         if let Some(sid) = sid {
             req.headers_mut()
@@ -640,4 +642,26 @@ async fn suspending_the_host_ends_their_game() {
         .await
         .unwrap();
     assert_eq!(status, "ended");
+}
+
+/// SEC-26: a page on another site cannot open a game socket with the
+/// host's cookie; the page's own origin can.
+#[tokio::test]
+async fn sockets_from_other_sites_are_refused() {
+    let env = env_or_skip!();
+    let open = |origin: String| {
+        let addr = env.addr.clone();
+        async move {
+            let mut req = format!("ws://{addr}/ws").into_client_request().unwrap();
+            req.headers_mut().insert("origin", origin.parse().unwrap());
+            tokio_tungstenite::connect_async(req).await
+        }
+    };
+    match open("https://evil.example".into()).await {
+        Err(tokio_tungstenite::tungstenite::Error::Http(res)) => {
+            assert_eq!(res.status(), 403)
+        }
+        other => panic!("expected 403, got {:?}", other.map(|_| ())),
+    }
+    assert!(open(format!("http://{}", env.addr)).await.is_ok());
 }

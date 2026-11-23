@@ -1,6 +1,7 @@
 [package]
 name = "myquiz-engine"
 version = "0.1.0"
+publish = false
 edition.workspace = true
 license.workspace = true
 description = "Game state machine, answer matching and scoring as pure functions."
