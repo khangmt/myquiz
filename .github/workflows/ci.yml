@@ -110,3 +110,11 @@ jobs:
           push: false
           cache-from: type=gha,scope=caddy
           cache-to: type=gha,mode=max,scope=caddy
+      - name: Backup image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/backup.Dockerfile
+          push: false
+      - name: Backup scripts are valid shell
+        run: sh -n infra/backup/backup.sh && sh -n infra/backup/restore.sh
