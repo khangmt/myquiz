@@ -15,6 +15,7 @@ The work follows the requirements spec (v1.0) and the design document. Requireme
 | --- | --- |
 | `crates/server` | The `myquiz` binary: `myquiz api` (REST) and `myquiz game` (WebSockets) |
 | `crates/engine` | Game state machine, answer matching and scoring as pure functions |
+| `crates/bundle` | The quiz zip format: safe import and export of a quiz with its images |
 | `crates/protocol` | REST and WebSocket message types, exported to TypeScript with ts-rs |
 | `migrations/` | PostgreSQL schema (sqlx migrations, applied by `myquiz api` at start) |
 | `web/` | React + TypeScript app (Vite, pnpm, Tailwind, i18next with `vi` and `en`) |
