@@ -244,7 +244,8 @@
       "NOT_FOUND": "Player not found.",
       "DISCONNECTED": "Disconnected, please try again.",
       "TIMEOUT": "The server didn't answer, please try again."
-    }
+    },
+    "qr": "QR code to join the game"
   },
   "reports": {
     "title": "Game reports",
@@ -306,5 +307,11 @@
     "target": "Target",
     "details": "Details",
     "system": "System"
+  },
+  "expiry": {
+    "banner_one": "{{count}} quiz will be deleted in {{days}} day(s):",
+    "banner_other": "{{count}} quizzes will be deleted in {{days}} day(s):",
+    "howToKeep": "Edit it, host a game with it, or download the zip to keep it.",
+    "dismiss": "Hide for today"
   }
 }

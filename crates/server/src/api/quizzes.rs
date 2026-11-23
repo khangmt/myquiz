@@ -438,6 +438,33 @@ pub struct ListQuery {
     page: Option<u32>,
 }
 
+/// `GET /quizzes/expiring`: the user's quizzes due for deletion within 3
+/// days, soonest first (FR-QZ-19).
+pub async fn expiring(
+    State(state): State<ApiState>,
+    user: AuthUser,
+) -> ApiResult<Json<Vec<myquiz_protocol::quiz::ExpiringQuiz>>> {
+    let rows: Vec<(Uuid, String, OffsetDateTime)> = sqlx::query_as(
+        "SELECT id, title, last_used_at + make_interval(days => $2) AS expires FROM quizzes \
+         WHERE owner_id = $1 AND deleted_at IS NULL \
+           AND last_used_at + make_interval(days => $2) <= now() + interval '3 days' \
+         ORDER BY expires LIMIT 20",
+    )
+    .bind(user.id)
+    .bind(state.retention_days as i32)
+    .fetch_all(&state.app.db)
+    .await?;
+    Ok(Json(
+        rows.into_iter()
+            .map(|(id, title, at)| myquiz_protocol::quiz::ExpiringQuiz {
+                id: id.to_string(),
+                title,
+                expires_at: rfc3339(at),
+            })
+            .collect(),
+    ))
+}
+
 /// `GET /quizzes?q=&page=`: the user's quizzes, newest edit first,
 /// optionally filtered by title.
 pub async fn list(

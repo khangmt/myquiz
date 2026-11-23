@@ -34,6 +34,10 @@ x-app: &app
     COOKIE_SECURE: ${COOKIE_SECURE:-true}
     RETENTION_DAYS: ${RETENTION_DAYS:-21}
     MAX_ACTIVE_GAMES: ${MAX_ACTIVE_GAMES:-100}
+    CLEANUP_ENABLED: ${CLEANUP_ENABLED:-true}
+    CLEANUP_HOUR: ${CLEANUP_HOUR:-2}
+    SMTP_URL: ${SMTP_URL:-}
+    MAIL_FROM: ${MAIL_FROM:-myquiz <no-reply@localhost>}
   depends_on:
     postgres: { condition: service_healthy }
     redis: { condition: service_healthy }

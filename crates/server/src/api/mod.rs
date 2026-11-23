@@ -114,6 +114,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/config", get(client_config))
         .route("/health", get(health))
         .route("/quizzes", get(quizzes::list).post(quizzes::create))
+        .route("/quizzes/expiring", get(quizzes::expiring))
         .route(
             "/quizzes/{id}",
             get(quizzes::get_one)

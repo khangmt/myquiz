@@ -113,3 +113,22 @@ test("signing out calls the API and returns home", async () => {
   await waitFor(() => expect(screen.getByText("Tham gia trò chơi")).toBeTruthy());
   expect(calls.some((c) => c.url === "/api/v1/auth/logout")).toBe(true);
 });
+
+test("signed-in users are warned about quizzes deleted within 3 days", async () => {
+  const soon = new Date(Date.now() + 2 * 86_400_000 - 60_000).toISOString();
+  mockFetch((url) =>
+    url.endsWith("/me")
+      ? { status: 200, body: ME }
+      : url.endsWith("/quizzes/expiring")
+        ? { status: 200, body: [{ id: "q1", title: "Toán lớp 5", expiresAt: soon }] }
+        : url.includes("/quizzes?")
+          ? { status: 200, body: { items: [], page: 1, pageSize: 20, total: 0 } }
+          : undefined,
+  );
+  localStorage.clear();
+  renderApp("/quizzes");
+  const banner = await screen.findByText(/sẽ bị xoá trong 2 ngày nữa/);
+  expect(banner.closest("[role=status]")!.textContent).toContain("Toán lớp 5");
+  fireEvent.click(screen.getByText("Ẩn hôm nay"));
+  await waitFor(() => expect(screen.queryByText(/sẽ bị xoá trong/)).toBeNull());
+});

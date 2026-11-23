@@ -287,6 +287,16 @@ async fn three_bots_play_a_full_game() {
             .await,
         "NICK_INVALID"
     );
+    // SEC-08: the word list.
+    assert_eq!(
+        stranger
+            .refused(
+                "player:join",
+                json!({ "pin": pin, "nickname": "Đ.M vcl", "deviceId": "x" })
+            )
+            .await,
+        "NICK_INVALID"
+    );
     assert_eq!(
         stranger
             .refused(

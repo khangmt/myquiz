@@ -129,6 +129,7 @@ test("the host runs the lobby, starts, and moves on after the reveal", async () 
   expect(await screen.findByText("123456")).toBeTruthy();
   expect(screen.getByText("1 người chơi")).toBeTruthy();
   expect(await screen.findByText("http://192.168.1.20:8080/join?pin=123456")).toBeTruthy();
+  expect((await screen.findByAltText("Mã QR để vào trò chơi")).getAttribute("src")).toMatch(/^data:image\/png;base64,/);
 
   fireEvent.click(screen.getByLabelText("Mời Lan ra"));
   expect(ws.sent.at(-1)).toMatchObject({ t: "host:kick", d: { playerId: "p1" } });
