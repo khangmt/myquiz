@@ -1,0 +1,39 @@
+name: Uptime
+
+# External uptime check (NFR-05, NFR-06): runs from GitHub, outside the
+# faculty network, so it notices when the whole server or its domain is
+# down. Off until the repository variable UPTIME_URL is set to the public
+# site, e.g. https://quiz.example.edu.vn (Settings > Secrets and variables >
+# Actions > Variables). A failed run emails whoever last changed this file's
+# schedule, per GitHub's rules for scheduled workflows.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: ${{ vars.UPTIME_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Site, API, database and Redis
+        run: |
+          for i in 1 2 3; do
+            body=$(curl -fsS --max-time 10 "${{ vars.UPTIME_URL }}/api/v1/health") && break
+            sleep 20
+          done
+          echo "$body"
+          echo "$body" | grep -q '"status":"ok"'
+          curl -fsS --max-time 10 -o /dev/null "${{ vars.UPTIME_URL }}/"
+      - name: Game sockets accept a connection
+        run: |
+          code=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' --http1.1 \
+            -H "Connection: Upgrade" -H "Upgrade: websocket" \
+            -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dXB0aW1lLWNoZWNrLWtleQ==" \
+            "${{ vars.UPTIME_URL }}/ws" || true)
+          echo "socket handshake: $code"
+          test "$code" = 101

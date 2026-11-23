@@ -34,8 +34,8 @@ pub struct Config {
     pub retention_days: u32,
 
     /// New games are refused with 503 CAPACITY_FULL above this many running
-    /// games (NFR-03). Set to the load-tested figure.
-    #[arg(long, env = "MAX_ACTIVE_GAMES", default_value_t = 200)]
+    /// games (NFR-03). 100 at launch: docs/load-test.md.
+    #[arg(long, env = "MAX_ACTIVE_GAMES", default_value_t = 100)]
     pub max_active_games: u32,
 
     /// Where uploaded images are stored. Caddy serves this folder at

@@ -110,3 +110,46 @@ The `Security` workflow runs on every pull request, on main and every week:
   The HTML report is attached to the run.
 
 Dependabot opens weekly update PRs for Cargo, npm, Docker and Actions.
+
+## Backups
+
+The faculty server has no backups of its own, so the `backup` service
+writes an encrypted copy of the database and the uploaded images every
+night at 03:00 (after the 02:00 cleanup), and the files must also be
+copied to another machine.
+
+Switch it on at deploy:
+
+1. On your own computer, make a key pair with [age](https://age-encryption.org)
+   (`brew install age`): `age-keygen -o myquiz-backup.key`. Keep the key file
+   off the server, in a password manager or on two of your own devices.
+   Without it no backup can be read.
+2. In `infra/.env` on the server set `BACKUP_AGE_RECIPIENT` to the public key
+   that `age-keygen` printed (`age1...`), and `BACKUP_UID`/`BACKUP_GID` to
+   your user (`id -u`, `id -g`). Create the folder: `mkdir -p infra/backups`.
+3. `docker compose --profile backup up -d --build`, then check one backup
+   right away: `docker compose run --rm backup now`.
+
+Copy the files off the server, for example from your Mac every morning:
+
+```sh
+rsync -a you@server:myquiz/infra/backups/ ~/myquiz-backups/
+```
+
+Restore drill (once a month, into a scratch database):
+
+```sh
+PGHOST=localhost PGUSER=myquiz PGPASSWORD=... PGDATABASE=myquiz_restore \
+  infra/backup/restore.sh myquiz-backup.key myquiz-20261207-0300.dump.age
+```
+
+The service is marked unhealthy when the last good backup is over 26
+hours old (`docker compose ps`).
+
+## Uptime check
+
+`.github/workflows/uptime.yml` checks the public site every 10 minutes from
+GitHub: the home page, `/api/v1/health` (API, database and Redis) and a game
+socket handshake. It is off until the repository variable `UPTIME_URL` is set
+to the public address. GitHub emails a failed run to whoever last changed
+the workflow's schedule.
