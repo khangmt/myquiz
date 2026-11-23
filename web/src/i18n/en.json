@@ -241,7 +241,8 @@
       "NOT_FOUND": "Player not found.",
       "DISCONNECTED": "Disconnected, please try again.",
       "TIMEOUT": "The server didn't answer, please try again."
-    }
+    },
+    "qr": "QR code to join the game"
   },
   "reports": {
     "title": "Game reports",
