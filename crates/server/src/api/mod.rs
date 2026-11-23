@@ -7,6 +7,8 @@ pub mod games;
 pub mod media;
 pub mod quizzes;
 pub mod ratelimit;
+pub mod signed;
+pub mod zip;
 
 #[cfg(test)]
 mod quiz_tests;
@@ -40,6 +42,8 @@ pub struct ApiState {
     /// Image decoding is CPU heavy: at most 2 at once per process, so a
     /// burst of uploads cannot starve the rest of the API.
     pub image_permits: Arc<Semaphore>,
+    /// Zip imports at once per process; above it, 503 IMPORT_BUSY.
+    pub import_permits: Arc<Semaphore>,
 }
 
 impl ApiState {
@@ -57,6 +61,7 @@ impl ApiState {
             max_active_games: cfg.max_active_games,
             media_dir: Arc::new(PathBuf::from(&cfg.media_dir)),
             image_permits: Arc::new(Semaphore::new(2)),
+            import_permits: Arc::new(Semaphore::new(2)),
         })
     }
 }
@@ -78,14 +83,21 @@ pub fn router(state: ApiState) -> Router {
         .route("/quizzes/{id}/publish", post(quizzes::publish))
         .route("/games", post(games::create))
         .route("/games/pin/{pin}", get(games::check_pin))
+        .route("/quizzes/{id}/export", post(zip::export))
+        .route("/exports/{token}", get(zip::download))
+        .route("/quiz-template.zip", get(zip::template))
         // SEC-21: 1 MB for everything but uploads.
         .layer(RequestBodyLimitLayer::new(1024 * 1024));
     let uploads = Router::new()
         .route("/media", post(media::upload))
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(media::MAX_BODY));
+    let imports = Router::new()
+        .route("/quizzes/import", post(zip::import))
+        .layer(DefaultBodyLimit::disable())
+        .layer(RequestBodyLimitLayer::new(zip::MAX_IMPORT_BODY + 64 * 1024));
     Router::new()
-        .nest("/api/v1", v1.merge(uploads))
+        .nest("/api/v1", v1.merge(uploads).merge(imports))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

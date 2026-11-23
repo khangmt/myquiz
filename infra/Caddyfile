@@ -20,6 +20,10 @@
 	}
 
 	handle /api/* {
+		# Largest body: a 25 MB quiz zip plus form overhead (SEC-21, SEC-31).
+		request_body {
+			max_size 26MB
+		}
 		reverse_proxy api:8080 {
 			lb_policy round_robin
 			health_uri /healthz

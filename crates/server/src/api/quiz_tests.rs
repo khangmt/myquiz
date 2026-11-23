@@ -382,6 +382,10 @@ fn urlencode(s: &str) -> String {
 }
 
 fn multipart(user: &User, parts: &[(&str, &[u8])]) -> Request<Body> {
+    multipart_to(user, "/api/v1/media", parts)
+}
+
+fn multipart_to(user: &User, uri: &str, parts: &[(&str, &[u8])]) -> Request<Body> {
     let boundary = "myquiz-test-boundary";
     let mut body = Vec::new();
     for (name, bytes) in parts {
@@ -396,7 +400,7 @@ fn multipart(user: &User, parts: &[(&str, &[u8])]) -> Request<Body> {
         body.extend_from_slice(b"\r\n");
     }
     body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
-    Request::post("/api/v1/media")
+    Request::post(uri)
         .header(header::COOKIE, &user.cookie)
         .header("X-CSRF-Token", &user.csrf)
         .header(
@@ -499,4 +503,226 @@ async fn upload_an_image_and_use_it_in_a_quiz() {
     let mut req = multipart(&lan, &[("file", &png(10, 10))]);
     req.headers_mut().remove("X-CSRF-Token");
     assert_eq!(send(&env.app, req).await.status(), StatusCode::FORBIDDEN);
+}
+
+async fn body_bytes(res: axum::response::Response) -> Vec<u8> {
+    use http_body_util::BodyExt;
+    res.into_body().collect().await.unwrap().to_bytes().to_vec()
+}
+
+#[tokio::test]
+async fn download_a_quiz_as_zip_and_upload_it_again() {
+    let env = crate::api_env_or_skip!("");
+    let lan = user(&env).await;
+    let minh = user(&env).await;
+
+    // A quiz with a cover and a question image.
+    let res = send(
+        &env.app,
+        multipart(
+            &lan,
+            &[("file", &png(64, 32)), ("alt", "Bản đồ".as_bytes())],
+        ),
+    )
+    .await;
+    let media = json_body(res).await;
+    let mut q = question("Ở đâu?");
+    q["mediaId"] = media["id"].clone();
+    let mut fill = json!({
+        "type": "fill_blank", "text": "Thủ đô là ___", "timeLimitS": 30, "points": 2000,
+        "acceptedAnswers": ["Hà Nội"], "ignoreDiacritics": true,
+    });
+    fill["options"] = json!([]);
+    let mut body = quiz("Địa lý: thủ đô", vec![q, fill]);
+    body["coverMediaId"] = media["id"].clone();
+    let res = send(&env.app, lan.req("POST", "/api/v1/quizzes", Some(body))).await;
+    let original = json_body(res).await;
+    let id = original["id"].as_str().unwrap().to_string();
+
+    // Someone else cannot export it.
+    let res = send(
+        &env.app,
+        minh.req("POST", &format!("/api/v1/quizzes/{id}/export"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+    // The owner gets a link; the link alone downloads the zip.
+    let res = send(
+        &env.app,
+        lan.req("POST", &format!("/api/v1/quizzes/{id}/export"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let link = json_body(res).await;
+    let url = link["url"].as_str().unwrap().to_string();
+    let res = send(&env.app, Request::get(&url).body(Body::empty()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()[header::CONTENT_TYPE], "application/zip");
+    let disposition = res.headers()[header::CONTENT_DISPOSITION]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        disposition.starts_with("attachment; filename=\"myquiz-dia-ly-thu-do-"),
+        "{disposition}"
+    );
+    let zip = body_bytes(res).await;
+
+    let bundle = myquiz_bundle::read_bundle(
+        std::io::Cursor::new(&zip),
+        &myquiz_bundle::Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(bundle.quiz.cover.as_deref(), Some("media/cover.webp"));
+    assert_eq!(
+        bundle.quiz.questions[0].image.as_deref(),
+        Some("media/q1.webp")
+    );
+    assert_eq!(
+        bundle.quiz.questions[0].image_alt.as_deref(),
+        Some("Bản đồ")
+    );
+    assert_eq!(bundle.images.len(), 2);
+
+    // A forged or altered link does nothing.
+    let mut forged = url.clone();
+    forged.push('0');
+    let res = send(&env.app, Request::get(&forged).body(Body::empty()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::GONE);
+
+    // Minh uploads the zip: a new private draft owned by Minh, same content.
+    let res = send(
+        &env.app,
+        multipart_to(&minh, "/api/v1/quizzes/import", &[("file", &zip)]),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let new_id = json_body(res).await["quizId"].as_str().unwrap().to_string();
+    assert_ne!(new_id, id);
+    let res = send(
+        &env.app,
+        minh.req("GET", &format!("/api/v1/quizzes/{new_id}"), None),
+    )
+    .await;
+    let copy = json_body(res).await;
+    assert_eq!(copy["title"], "Địa lý: thủ đô");
+    assert_eq!(copy["status"], "draft");
+    assert_eq!(copy["visibility"], "private");
+    assert_eq!(copy["questions"][1]["acceptedAnswers"], json!(["Hà Nội"]));
+    assert_eq!(copy["questions"][1]["points"], 2000);
+    assert!(copy["questions"][0]["mediaUrl"]
+        .as_str()
+        .unwrap()
+        .starts_with("/media/"));
+    assert_ne!(
+        copy["questions"][0]["mediaId"],
+        original["questions"][0]["mediaId"]
+    );
+    assert!(copy["coverMediaUrl"].is_string());
+    let owner: Uuid = sqlx::query_scalar("SELECT owner_id FROM media WHERE id = $1")
+        .bind(
+            copy["questions"][0]["mediaId"]
+                .as_str()
+                .unwrap()
+                .parse::<Uuid>()
+                .unwrap(),
+        )
+        .fetch_one(&env.db)
+        .await
+        .unwrap();
+    assert_eq!(owner, minh.id);
+    // It can be published straight away.
+    let res = send(
+        &env.app,
+        minh.req("POST", &format!("/api/v1/quizzes/{new_id}/publish"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // An unfinished quiz is not downloadable, so every zip uploads again.
+    let res = send(
+        &env.app,
+        lan.req("POST", "/api/v1/quizzes", Some(quiz("Nháp", vec![]))),
+    )
+    .await;
+    let draft = json_body(res).await["id"].as_str().unwrap().to_string();
+    let res = send(
+        &env.app,
+        lan.req("POST", &format!("/api/v1/quizzes/{draft}/export"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(json_body(res).await["problems"][0]["code"], "NO_QUESTIONS");
+}
+
+#[tokio::test]
+async fn bad_zips_are_refused_with_every_problem() {
+    let env = crate::api_env_or_skip!("");
+    let lan = user(&env).await;
+    let import = |bytes: Vec<u8>| multipart_to(&lan, "/api/v1/quizzes/import", &[("file", &bytes)]);
+
+    let res = send(&env.app, import(b"not a zip".to_vec())).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = json_body(res).await;
+    assert_eq!(body["error"]["code"], "IMPORT_INVALID");
+    assert_eq!(body["errors"][0]["problem"], "NOT_A_ZIP");
+
+    // A quiz.json with a broken question and an image that is not one.
+    let mut file = myquiz_bundle::template();
+    file.quiz.questions[0].time_limit_s = 1;
+    file.quiz.questions[1].image = Some("media/fake.png".into());
+    let fake = b"\x89PNG\r\n\x1a\n but not really a png".to_vec();
+    let zip = myquiz_bundle::write_bundle(
+        std::io::Cursor::new(Vec::new()),
+        &file,
+        vec![("media/fake.png".to_string(), fake.clone())],
+    )
+    .unwrap()
+    .into_inner();
+    let res = send(&env.app, import(zip)).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = json_body(res).await;
+    assert_eq!(body["errors"][0]["problem"], "TIME_LIMIT");
+    assert_eq!(body["errors"][0]["question"], 0);
+
+    // The structure is fine but the image fails the media pipeline.
+    let mut file = myquiz_bundle::template();
+    file.quiz.questions[1].image = Some("media/fake.png".into());
+    let zip = myquiz_bundle::write_bundle(
+        std::io::Cursor::new(Vec::new()),
+        &file,
+        vec![("media/fake.png".to_string(), fake)],
+    )
+    .unwrap()
+    .into_inner();
+    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM quizzes WHERE owner_id = $1")
+        .bind(lan.id)
+        .fetch_one(&env.db)
+        .await
+        .unwrap();
+    let res = send(&env.app, import(zip)).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = json_body(res).await;
+    assert_eq!(body["errors"][0]["file"], "media/fake.png");
+    assert_eq!(body["errors"][0]["problem"], "NOT_AN_IMAGE");
+    let after: i64 = sqlx::query_scalar("SELECT count(*) FROM quizzes WHERE owner_id = $1")
+        .bind(lan.id)
+        .fetch_one(&env.db)
+        .await
+        .unwrap();
+    assert_eq!(before, after, "nothing is saved from a refused zip");
+
+    // The template downloads without signing in and imports cleanly.
+    let res = send(
+        &env.app,
+        Request::get("/api/v1/quiz-template.zip")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let template = body_bytes(res).await;
+    let res = send(&env.app, import(template)).await;
+    assert_eq!(res.status(), StatusCode::CREATED);
 }

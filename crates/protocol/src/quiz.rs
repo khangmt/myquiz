@@ -165,3 +165,43 @@ pub struct MediaDoc {
     pub height: u32,
     pub alt_text: Option<String>,
 }
+
+/// Response of `POST /quizzes/:id/export`: open `url` to download the zip.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct ExportLink {
+    pub url: String,
+    /// The link stops working after this time (10 minutes). RFC 3339.
+    pub expires_at: String,
+}
+
+/// 201 body of `POST /quizzes/import`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct Imported {
+    pub quiz_id: String,
+}
+
+/// One thing wrong with an uploaded zip.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct ImportProblem {
+    /// The file inside the zip, e.g. quiz.json or media/q1.png.
+    pub file: String,
+    /// 0-based question index, if the problem is in a question.
+    pub question: Option<u32>,
+    /// The quiz.json field, e.g. timeLimitS.
+    pub field: Option<String>,
+    /// e.g. MISSING_IMAGE; the client translates it.
+    pub problem: String,
+}
+
+/// 422 body of `POST /quizzes/import`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct ImportRefused {
+    pub error: crate::ApiErrorBody,
+    pub errors: Vec<ImportProblem>,
+}

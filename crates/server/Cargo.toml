@@ -23,6 +23,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 myquiz-engine.workspace = true
 myquiz-protocol.workspace = true
+myquiz-bundle.workspace = true
 uuid.workspace = true
 rand = "0.9"
 sha2 = "0.11.1"
@@ -32,6 +33,8 @@ hmac = "0.13.0"
 time = { version = "0.3", features = ["formatting"] }
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 webp = { version = "0.3.1", default-features = false }
+tempfile = "3"
+tokio-util = { version = "0.7", features = ["io"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "form"] }
 
 [dev-dependencies]
