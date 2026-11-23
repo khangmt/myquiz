@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     container: semgrep/semgrep:1.99.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Errors fail the build; lower findings are printed for review.
       - run: >-
           semgrep scan --metrics=off --error --severity ERROR
@@ -36,7 +36,7 @@ jobs:
     name: Licences and sources (cargo deny)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check bans licenses sources
@@ -45,7 +45,7 @@ jobs:
     name: Container scan (Trivy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
       - name: Server image
         uses: docker/build-push-action@v6
@@ -96,7 +96,7 @@ jobs:
       HTTP_PORT: "8080"
       HTTPS_PORT: "8443"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Start the stack
         run: docker compose -f infra/docker-compose.yml up -d --build --wait
       - name: Wait for the site
