@@ -4,5 +4,7 @@ FROM postgres:16
 RUN apt-get update && apt-get install -y --no-install-recommends age \
     && rm -rf /var/lib/apt/lists/*
 COPY infra/backup/backup.sh infra/backup/restore.sh /usr/local/bin/
-# docker-compose.yml runs it as the owner of the backup folder (BACKUP_UID).
+# Never root. docker-compose.yml runs it as the owner of the backup folder
+# (BACKUP_UID) instead of this default.
+USER postgres
 ENTRYPOINT ["backup.sh"]
