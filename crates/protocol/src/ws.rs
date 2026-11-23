@@ -87,7 +87,7 @@ wire! {
 
     // ---- ack payloads ----
 
-    pub struct TimePong { pub client_sent_at: f64, pub server_now: u64 }
+    pub struct TimePong { pub client_sent_at: f64, #[ts(type = "number")] pub server_now: u64 }
     pub struct AnswerAccepted { pub accepted: bool }
 
     /// Sent on host:attach, player:join and player:resume so a (re)connecting
@@ -108,6 +108,7 @@ wire! {
     pub struct MyStanding {
         pub player_id: String,
         pub nickname: String,
+        #[ts(type = "number")]
         pub score: u64,
         pub rank: u32,
         /// Whether this player already answered the running question.
@@ -124,8 +125,10 @@ wire! {
         #[serde(flatten)]
         pub question: PublicQuestion,
         /// Server clock, ms since the Unix epoch: when options show.
+        #[ts(type = "number")]
         pub starts_at: u64,
         /// Server clock: when answers stop being accepted.
+        #[ts(type = "number")]
         pub ends_at: u64,
     }
 
@@ -143,12 +146,13 @@ wire! {
         pub index: usize,
         pub correct: bool,
         pub points: u32,
+        #[ts(type = "number")]
         pub total: u64,
         pub rank: u32,
         pub correct_option_ids: Vec<OptionId>,
     }
 
-    pub struct ScoreRow { pub nickname: String, pub score: u64 }
+    pub struct ScoreRow { pub nickname: String, #[ts(type = "number")] pub score: u64 }
     pub struct Leaderboard { pub top: Vec<ScoreRow> }
 
     pub struct GameEnded { pub reason: EndReason }
@@ -200,6 +204,7 @@ pub enum ServerPush {
 pub struct Ack {
     /// Always "ack".
     pub t: String,
+    #[ts(type = "number")]
     pub id: u64,
     pub ok: bool,
     #[serde(default)]
