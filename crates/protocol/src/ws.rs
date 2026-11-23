@@ -144,6 +144,8 @@ wire! {
 
     pub struct QuestionResult {
         pub index: usize,
+        /// False when the player sent nothing before time ran out.
+        pub answered: bool,
         pub correct: bool,
         pub points: u32,
         #[ts(type = "number")]

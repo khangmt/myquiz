@@ -314,8 +314,8 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
         ))}
 
       {view.kind === "result" && (
-        <div className={`flex w-full flex-col gap-2 rounded-xl p-6 text-white ${view.r.correct ? "bg-green-600" : "bg-red-600"}`}>
-          <Big>{view.r.correct ? t("game.correct") : t("game.incorrect")}</Big>
+        <div className={`flex w-full flex-col gap-2 rounded-xl p-6 text-white ${view.r.correct ? "bg-green-600" : view.r.answered ? "bg-red-600" : "bg-slate-600"}`}>
+          <Big>{!view.r.answered ? t("game.timeUp") : view.r.correct ? t("game.correct") : t("game.incorrect")}</Big>
           <p className="text-2xl">+{view.r.points}</p>
           <p>{t("game.rankIs", { rank: view.r.rank })}</p>
         </div>

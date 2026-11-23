@@ -86,7 +86,7 @@ test("a player joins with a nickname, answers, and sees the result", async () =>
   expect(await screen.findByText("Đã gửi câu trả lời!")).toBeTruthy();
   ws.ack("answer:submit", { accepted: true });
 
-  ws.push("question:result", { index: 0, correct: true, points: 950, total: 950, rank: 1, correctOptionIds: [0] });
+  ws.push("question:result", { index: 0, answered: true, correct: true, points: 950, total: 950, rank: 1, correctOptionIds: [0] });
   expect(await screen.findByText("Chính xác!")).toBeTruthy();
   expect(screen.getByText("+950")).toBeTruthy();
 });
@@ -119,13 +119,16 @@ test("a wrong PIN is explained", async () => {
 });
 
 test("the host runs the lobby, starts, and moves on after the reveal", async () => {
-  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : undefined));
+  mockFetch((url) =>
+    url.endsWith("/me") ? { status: 200, body: ME } : url.endsWith("/config") ? { status: 200, body: { joinUrl: "http://192.168.1.20:8080" } } : undefined,
+  );
   renderApp("/host/123456");
   const ws = await socket();
   expect(ws.sent[0]).toMatchObject({ t: "host:attach", d: { pin: "123456" } });
   ws.ack("host:attach", { ...lobby, players: [{ id: "p1", nickname: "Lan" }] });
   expect(await screen.findByText("123456")).toBeTruthy();
   expect(screen.getByText("1 người chơi")).toBeTruthy();
+  expect(await screen.findByText("http://192.168.1.20:8080/join?pin=123456")).toBeTruthy();
 
   fireEvent.click(screen.getByLabelText("Mời Lan ra"));
   expect(ws.sent.at(-1)).toMatchObject({ t: "host:kick", d: { playerId: "p1" } });
@@ -146,4 +149,15 @@ test("the host runs the lobby, starts, and moves on after the reveal", async () 
   ws.push("leaderboard:show", { top: [{ nickname: "Lan", score: 950 }] });
   expect(await screen.findByText("Bảng xếp hạng")).toBeTruthy();
   expect(screen.getByText("950 điểm")).toBeTruthy();
+});
+
+test("a player who runs out of time sees time's up, not wrong", async () => {
+  localStorage.setItem("myquiz.player.123456", "tok-9");
+  mockFetch(() => undefined);
+  renderApp("/join?pin=123456");
+  const ws = await socket();
+  ws.ack("player:resume", { ...lobby, me: { playerId: "p1", nickname: "Lan", score: 0, rank: 1, answered: false } });
+  ws.push("question:result", { index: 0, answered: false, correct: false, points: 0, total: 0, rank: 2, correctOptionIds: [0] });
+  expect(await screen.findByText("Hết giờ!")).toBeTruthy();
+  expect(screen.queryByText("Chưa đúng")).toBeNull();
 });

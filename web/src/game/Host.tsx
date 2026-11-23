@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../api/client";
+import type { ClientConfig } from "../generated/ClientConfig";
 import { useTranslation } from "react-i18next";
 import type { GameSnapshot } from "../generated/GameSnapshot";
 import type { GameState } from "../generated/GameState";
@@ -120,7 +123,11 @@ export function Host() {
   }
   const next = () => act({ t: "host:next", d: { expect: state.current } });
 
-  const joinUrl = `${window.location.origin}/join?pin=${pin}`;
+  // The server knows the address phones should use (JOIN_URL, else
+  // PUBLIC_URL); the browser's own origin may be localhost.
+  const config = useQuery({ queryKey: ["config"], queryFn: () => api<ClientConfig>("/config"), staleTime: Infinity });
+  const joinBase = (config.data?.joinUrl ?? window.location.origin).replace(/\/$/, "");
+  const joinUrl = `${joinBase}/join?pin=${pin}`;
   const button = "rounded-lg bg-indigo-600 px-5 py-3 text-lg font-semibold text-white disabled:opacity-50";
 
   return (
@@ -149,7 +156,7 @@ export function Host() {
 
       {view.kind === "lobby" && (
         <>
-          <p className="text-lg text-slate-600">{t("game.joinAt", { url: `${window.location.host}/join` })}</p>
+          <p className="text-lg text-slate-600">{t("game.joinAt", { url: `${joinBase.replace(/^https?:\/\//, "")}/join` })}</p>
           <p className="font-mono text-6xl font-bold tracking-widest sm:text-7xl" aria-label={t("game.pinIs", { pin })}>
             {pin}
           </p>

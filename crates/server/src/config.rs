@@ -55,6 +55,13 @@ pub struct AuthSettings {
     #[arg(long, env = "PUBLIC_URL", default_value = "http://localhost:8080")]
     pub public_url: String,
 
+    /// Where players open the game, shown big on the host screen. Defaults
+    /// to PUBLIC_URL. Set it to a LAN address (http://192.168.1.20:8080)
+    /// when phones on the same Wi-Fi should join a laptop: players never
+    /// sign in, so this address needs no Google redirect URI.
+    #[arg(long, env = "JOIN_URL")]
+    pub join_url: Option<String>,
+
     /// Google OAuth client. Without it, Google sign-in answers 503.
     #[arg(long, env = "GOOGLE_CLIENT_ID")]
     pub google_client_id: Option<String>,
@@ -109,6 +116,16 @@ impl AuthSettings {
         )
     }
 
+    /// The origin players use, without a trailing slash.
+    pub fn join_base(&self) -> String {
+        self.join_url
+            .as_deref()
+            .filter(|u| !u.trim().is_empty())
+            .unwrap_or(&self.public_url)
+            .trim_end_matches('/')
+            .to_string()
+    }
+
     pub fn allowed_domains(&self) -> Vec<String> {
         self.allowed_email_domains
             .split(',')
@@ -121,6 +138,7 @@ impl AuthSettings {
     pub fn for_tests() -> Self {
         AuthSettings {
             public_url: "http://localhost:8080".into(),
+            join_url: None,
             google_client_id: None,
             google_client_secret: None,
             google_auth_url: "https://accounts.google.com/o/oauth2/v2/auth".into(),
@@ -131,5 +149,23 @@ impl AuthSettings {
             cookie_secure: false,
             session_days: 7,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AuthSettings;
+
+    #[test]
+    fn join_url_defaults_to_public_url() {
+        let mut a = AuthSettings::for_tests();
+        a.public_url = "https://quiz.example.edu.vn/".into();
+        assert_eq!(a.join_base(), "https://quiz.example.edu.vn");
+        a.join_url = Some("  ".into());
+        assert_eq!(a.join_base(), "https://quiz.example.edu.vn");
+        a.join_url = Some("http://192.168.1.20:8080/".into());
+        assert_eq!(a.join_base(), "http://192.168.1.20:8080");
+        // Sign-in keeps using PUBLIC_URL.
+        assert!(a.redirect_uri().starts_with("https://quiz.example.edu.vn/"));
     }
 }

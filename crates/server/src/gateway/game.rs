@@ -467,6 +467,7 @@ impl GameService {
                 let res = by_player.get(id.as_str());
                 let push = ServerPush::QuestionResult(QuestionResult {
                     index,
+                    answered: res.is_some(),
                     correct: res.is_some_and(|r| r.correct),
                     points: res.map_or(0, |r| r.points),
                     total: r.standing.score,

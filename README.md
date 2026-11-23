@@ -54,3 +54,27 @@ Memory limits in `infra/docker-compose.yml` add up to about 9 GB (game 2x1 GB, a
 postgres 3 GB, redis 2 GB, caddy 0.5 GB, plus 0.5 GB reserved for backup and uptime later), under
 the 16 GB cap on the production server. Only Caddy publishes ports; PostgreSQL and Redis sit on an
 internal network.
+
+### Playing on phones on the same Wi-Fi
+
+The host screen shows the address players should open. It comes from `JOIN_URL` in
+`infra/.env`, or from `PUBLIC_URL` when `JOIN_URL` is empty. With `PUBLIC_URL=http://localhost:8080`,
+phones are told to open `localhost`, which points at the phone itself, so set `JOIN_URL` to the laptop's
+address on the Wi-Fi:
+
+1. Find the laptop's address: `ipconfig getifaddr en0` on a Mac, `hostname -I` on Linux,
+   `ipconfig` on Windows. Say it is `192.168.1.20`.
+2. In `infra/.env` set `JOIN_URL=http://192.168.1.20:8080` (with `HTTP_PORT=8080`). Keep
+   `PUBLIC_URL=http://localhost:8080` and `COOKIE_SECURE=false` for plain HTTP.
+3. `docker compose up -d` to apply it, sign in on the laptop at `http://localhost:8080`, and host.
+
+Only the host signs in, so only `PUBLIC_URL` needs a redirect URI in Google. Google does not accept a
+private IP such as `192.168.1.20` as a redirect URI, which is why the two addresses are separate. Phones
+must be on the same Wi-Fi, and the laptop's firewall must allow incoming connections on port 8080.
+
+### If Docker cannot resolve deb.debian.org during a build
+
+Some networks (often on macOS with Docker Desktop) give containers a DNS server that does not answer,
+so `apt-get` fails with "Temporary failure resolving 'deb.debian.org'". Give Docker public DNS servers:
+in Docker Desktop open Settings, then Docker Engine, add `"dns": ["8.8.8.8", "1.1.1.1"]` to the JSON,
+and click Apply & restart. On Linux put the same line in `/etc/docker/daemon.json` and restart Docker.

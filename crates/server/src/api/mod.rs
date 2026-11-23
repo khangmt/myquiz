@@ -66,12 +66,22 @@ impl ApiState {
     }
 }
 
+/// `GET /config`: public settings for the web app.
+async fn client_config(
+    axum::extract::State(state): axum::extract::State<ApiState>,
+) -> axum::Json<myquiz_protocol::quiz::ClientConfig> {
+    axum::Json(myquiz_protocol::quiz::ClientConfig {
+        join_url: state.auth.join_base(),
+    })
+}
+
 pub fn router(state: ApiState) -> Router {
     let v1 = Router::new()
         .route("/auth/google", get(auth::google_start))
         .route("/auth/google/callback", get(auth::google_callback))
         .route("/auth/logout", post(auth::logout))
         .route("/me", get(auth::me).patch(auth::update_me))
+        .route("/config", get(client_config))
         .route("/quizzes", get(quizzes::list).post(quizzes::create))
         .route(
             "/quizzes/{id}",
