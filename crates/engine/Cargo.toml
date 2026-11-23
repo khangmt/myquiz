@@ -8,3 +8,7 @@ description = "Game state machine, answer matching and scoring as pure functions
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
+unicode-normalization = "0.1.26"
+
+[dev-dependencies]
+serde_json.workspace = true
