@@ -67,6 +67,10 @@ services:
     command: ["api"]
     volumes:
       - media_data:/data/media
+    # The api calls Google to finish sign-in, so it needs a way out as well
+    # as the internal network. The game servers, PostgreSQL and Redis stay
+    # internal only.
+    networks: [internal, public]
     deploy:
       replicas: 2
       resources:
