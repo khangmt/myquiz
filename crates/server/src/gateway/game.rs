@@ -275,7 +275,10 @@ impl GameService {
             .collect::<Vec<_>>()
             .join(" ");
         let len = nickname.chars().count();
-        if !(NICK_MIN..=NICK_MAX).contains(&len) {
+        if !(NICK_MIN..=NICK_MAX).contains(&len)
+            || nickname.chars().any(char::is_control)
+            || myquiz_engine::profanity::is_offensive(&nickname)
+        {
             return Ok(Err("NICK_INVALID"));
         }
         if req.device_id.is_empty() || req.device_id.len() > 64 {
