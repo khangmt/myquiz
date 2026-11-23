@@ -1084,3 +1084,26 @@ async fn every_private_endpoint_needs_a_session_and_csrf() {
         }
     }
 }
+
+#[tokio::test]
+async fn quizzes_due_within_three_days_are_listed_for_the_warning() {
+    let env = crate::api_env_or_skip!("");
+    let lan = user(&env).await;
+    for (title, hours_ago) in [("Sắp xoá", 20 * 24), ("Còn lâu", 24)] {
+        sqlx::query(
+            "INSERT INTO quizzes (owner_id, title, last_used_at) \
+             VALUES ($1, $2, now() - make_interval(hours => $3))",
+        )
+        .bind(lan.id)
+        .bind(title)
+        .bind(hours_ago)
+        .execute(&env.db)
+        .await
+        .unwrap();
+    }
+    let res = send(&env.app, lan.req("GET", "/api/v1/quizzes/expiring", None)).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let list = json_body(res).await;
+    assert_eq!(list.as_array().unwrap().len(), 1, "{list}");
+    assert_eq!(list[0]["title"], "Sắp xoá");
+}

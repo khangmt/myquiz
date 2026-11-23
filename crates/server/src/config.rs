@@ -45,6 +45,45 @@ pub struct Config {
 
     #[command(flatten)]
     pub auth: AuthSettings,
+
+    #[command(flatten)]
+    pub cleanup: CleanupSettings,
+}
+
+/// The daily clean-up in `myquiz api` (design section 8, FR-QZ-18 to 20).
+#[derive(Debug, Clone, Args)]
+pub struct CleanupSettings {
+    /// Run the daily clean-up: reminder emails, deleting quizzes past their
+    /// date, purging deleted quizzes after 30 days and reports after 12
+    /// months.
+    #[arg(long, env = "CLEANUP_ENABLED", default_value_t = true, action = clap::ArgAction::Set)]
+    pub cleanup_enabled: bool,
+
+    /// Hour of the day (Vietnam time, UTC+7) the clean-up runs.
+    #[arg(long, env = "CLEANUP_HOUR", default_value_t = 2)]
+    pub cleanup_hour: u8,
+
+    /// Outgoing mail server for reminder emails, e.g.
+    /// smtps://user:password@smtp.gmail.com:465. Without it, no emails are
+    /// sent (the quiz-list and sign-in warnings still show).
+    #[arg(long, env = "SMTP_URL")]
+    pub smtp_url: Option<String>,
+
+    /// Sender of reminder emails.
+    #[arg(long, env = "MAIL_FROM", default_value = "myquiz <no-reply@localhost>")]
+    pub mail_from: String,
+}
+
+impl CleanupSettings {
+    #[cfg(test)]
+    pub fn for_tests() -> Self {
+        CleanupSettings {
+            cleanup_enabled: false,
+            cleanup_hour: 2,
+            smtp_url: None,
+            mail_from: "myquiz <no-reply@localhost>".into(),
+        }
+    }
 }
 
 /// Sign-in and session settings (design sections 6 and 9).

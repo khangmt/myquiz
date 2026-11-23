@@ -12,6 +12,7 @@ import type { QuestionStart } from "../generated/QuestionStart";
 import type { ScoreRow } from "../generated/ScoreRow";
 import type { ServerPush } from "../generated/ServerPush";
 import { AckError, GameSocket, type SocketStatus } from "./socket";
+import { JoinQr } from "./JoinQr";
 import { Big, Countdown, optionStyle, Screen } from "./ui";
 import { secondsLeft, useTicker } from "./useCountdown";
 
@@ -162,6 +163,7 @@ export function Host() {
           <p className="font-mono text-6xl font-bold tracking-widest sm:text-7xl" aria-label={t("game.pinIs", { pin })}>
             {pin}
           </p>
+          <JoinQr url={joinUrl} label={t("game.qr")} />
           <p className="break-all text-sm text-slate-500">{joinUrl}</p>
           <p className="text-xl font-semibold">{t("game.playerCount", { count: players.length })}</p>
           <ul className="flex flex-wrap justify-center gap-2">

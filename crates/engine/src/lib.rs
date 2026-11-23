@@ -17,6 +17,7 @@
 
 pub mod answer;
 pub mod matching;
+pub mod profanity;
 pub mod quiz;
 pub mod ranking;
 pub mod reveal;

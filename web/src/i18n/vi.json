@@ -239,7 +239,8 @@
       "NOT_FOUND": "Không tìm thấy người chơi.",
       "DISCONNECTED": "Mất kết nối, hãy thử lại.",
       "TIMEOUT": "Máy chủ không phản hồi, hãy thử lại."
-    }
+    },
+    "qr": "Mã QR để vào trò chơi"
   },
   "reports": {
     "title": "Báo cáo trò chơi",
@@ -301,5 +302,10 @@
     "target": "Đối tượng",
     "details": "Chi tiết",
     "system": "Hệ thống"
+  },
+  "expiry": {
+    "banner_other": "{{count}} bộ câu hỏi sẽ bị xoá trong {{days}} ngày nữa:",
+    "howToKeep": "Mở và sửa, tổ chức trò chơi, hoặc tải zip để giữ lại.",
+    "dismiss": "Ẩn hôm nay"
   }
 }

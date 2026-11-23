@@ -91,6 +91,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/me", get(auth::me).patch(auth::update_me))
         .route("/config", get(client_config))
         .route("/quizzes", get(quizzes::list).post(quizzes::create))
+        .route("/quizzes/expiring", get(quizzes::expiring))
         .route(
             "/quizzes/{id}",
             get(quizzes::get_one)

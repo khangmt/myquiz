@@ -155,6 +155,18 @@ pub struct PinCheck {
     pub locked: bool,
 }
 
+/// `GET /quizzes/expiring`: quizzes that will be deleted within 3 days,
+/// for the warning shown after sign-in (FR-QZ-19).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct ExpiringQuiz {
+    pub id: String,
+    pub title: String,
+    /// RFC 3339.
+    pub expires_at: String,
+}
+
 /// `GET /config`: settings the web app needs before sign-in.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
