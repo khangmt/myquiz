@@ -68,6 +68,7 @@ mod tests {
                 .into_owned(),
             auth: crate::config::AuthSettings::for_tests(),
             log_json: false,
+            cleanup: crate::config::CleanupSettings::for_tests(),
         };
         let state = AppState::connect(crate::Role::Api, &cfg).await.unwrap();
         crate::MIGRATOR.run(&state.db).await.unwrap();

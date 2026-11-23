@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { ME_KEY, useMe } from "../auth/useMe";
+import { ExpiryBanner } from "./ExpiryBanner";
 import { LanguageSelect } from "./LanguageSelect";
 
 export function Layout() {
@@ -54,6 +55,7 @@ export function Layout() {
           </div>
         </nav>
       </header>
+      {me.data && <ExpiryBanner />}
       <main className="mx-auto max-w-5xl px-4 py-6">
         <Outlet />
       </main>

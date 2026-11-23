@@ -2,10 +2,12 @@
 //!
 //! - `myquiz api`  serves REST, uploads and exports, and runs migrations at start.
 //! - `myquiz game` serves live games over WebSockets.
+//! - `myquiz cleanup` runs the daily clean-up once.
 //! - `myquiz migrate` applies database migrations and exits.
 //! - `myquiz healthcheck` is the Docker health check (no curl in the image).
 
 mod api;
+mod cleanup;
 mod config;
 mod gateway;
 mod live;
@@ -34,6 +36,9 @@ enum Command {
     Api(Config),
     /// Serve live games over WebSockets.
     Game(Config),
+    /// Run the daily clean-up once now (reminder emails, deleting expired
+    /// quizzes and old reports) and exit.
+    Cleanup(Config),
     /// Apply database migrations and exit.
     Migrate {
         #[arg(long, env = "DATABASE_URL")]
@@ -68,6 +73,17 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Api(cfg) => serve(Role::Api, cfg).await,
         Command::Game(cfg) => serve(Role::Game, cfg).await,
+        Command::Cleanup(cfg) => {
+            init_tracing(cfg.log_json);
+            let state = AppState::connect(Role::Api, &cfg).await?;
+            MIGRATOR.run(&state.db).await?;
+            let job = cleanup::Cleanup::from_config(state.db.clone(), &cfg)?;
+            match job.run_locked().await? {
+                Some(out) => println!("{out:?}"),
+                None => println!("another instance is running the clean-up"),
+            }
+            Ok(())
+        }
         Command::Migrate { database_url } => {
             init_tracing(false);
             let pool = sqlx::PgPool::connect(&database_url).await?;
@@ -121,6 +137,10 @@ async fn serve(role: Role, cfg: Config) -> anyhow::Result<()> {
     let mut app = routes::router(state.clone());
     if role == Role::Api {
         let api_state = api::ApiState::new(state.clone(), &cfg)?;
+        if cfg.cleanup.cleanup_enabled {
+            let job = cleanup::Cleanup::from_config(state.db.clone(), &cfg)?;
+            cleanup::spawn_daily(job, cfg.cleanup.cleanup_hour);
+        }
         app = app.merge(api::router(api_state));
     }
     if role == Role::Game {

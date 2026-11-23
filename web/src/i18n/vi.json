@@ -267,5 +267,10 @@
     "delete": "Xoá báo cáo",
     "confirmDelete": "Xoá vĩnh viễn báo cáo này? Không thể hoàn tác.",
     "view": "Xem báo cáo"
+  },
+  "expiry": {
+    "banner_other": "{{count}} bộ câu hỏi sẽ bị xoá trong {{days}} ngày nữa:",
+    "howToKeep": "Mở và sửa, tổ chức trò chơi, hoặc tải zip để giữ lại.",
+    "dismiss": "Ẩn hôm nay"
   }
 }
