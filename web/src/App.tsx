@@ -3,6 +3,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { Layout } from "./components/Layout";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
+import { Editor } from "./pages/Editor";
 import { Placeholder } from "./pages/Placeholder";
 import { QuizList } from "./pages/QuizList";
 
@@ -24,11 +25,12 @@ export default function App() {
           path="quizzes/:id/edit"
           element={
             <RequireAuth>
-              <Placeholder />
+              <Editor />
             </RequireAuth>
           }
         />
         <Route path="join" element={<Placeholder />} />
+        <Route path="host/:pin" element={<Placeholder />} />
         <Route path="*" element={<Placeholder />} />
       </Route>
     </Routes>
