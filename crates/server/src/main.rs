@@ -6,6 +6,9 @@
 //! - `myquiz healthcheck` is the Docker health check (no curl in the image).
 
 mod config;
+// Used by the WebSocket gateway, which arrives in the next PR.
+#[allow(dead_code, unused_imports)]
+mod live;
 mod routes;
 mod state;
 

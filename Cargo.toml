@@ -21,7 +21,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 ts-rs = { version = "10", features = ["serde-compat"] }
 uuid = { version = "1", features = ["v4", "serde"] }
-fred = "10"
+fred = { version = "10", features = ["i-scripts", "sha-1"] }
 
 myquiz-engine = { path = "crates/engine" }
 myquiz-protocol = { path = "crates/protocol" }
