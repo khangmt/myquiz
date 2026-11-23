@@ -77,6 +77,10 @@ pub(super) async fn env(domains: &str) -> Option<Env> {
         countdown_ms: 3000,
         retention_days: 21,
         max_active_games: 200,
+        media_dir: std::env::temp_dir()
+            .join("myquiz-test-media")
+            .to_string_lossy()
+            .into_owned(),
         auth,
         log_json: false,
     };

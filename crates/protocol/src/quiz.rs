@@ -22,6 +22,9 @@ pub struct QuestionDoc {
     /// An image uploaded with POST /media.
     #[serde(default)]
     pub media_id: Option<String>,
+    /// Where to show the image. Filled in by the server; ignored on save.
+    #[serde(default)]
+    pub media_url: Option<String>,
     pub time_limit_s: u32,
     /// 0, 1000 or 2000.
     pub points: u32,
@@ -65,6 +68,7 @@ pub struct QuizDoc {
     pub title: String,
     pub description: String,
     pub cover_media_id: Option<String>,
+    pub cover_media_url: Option<String>,
     pub visibility: String,
     /// "draft" or "published".
     pub status: String,
@@ -147,4 +151,17 @@ pub struct PinCheck {
     pub title: String,
     /// The host locked the lobby: new players cannot join.
     pub locked: bool,
+}
+
+/// Response of `POST /media`. Put `id` in a quiz; show `url`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct MediaDoc {
+    pub id: String,
+    /// e.g. /media/3f9c….webp, served by Caddy.
+    pub url: String,
+    pub width: u32,
+    pub height: u32,
+    pub alt_text: Option<String>,
 }

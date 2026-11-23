@@ -4,7 +4,7 @@ import type { QuestionDoc } from "./QuestionDoc";
 /**
  * `GET /quizzes/:id`. Send `version` back as `If-Match` when saving.
  */
-export type QuizDoc = { id: string, title: string, description: string, coverMediaId: string | null, visibility: string, 
+export type QuizDoc = { id: string, title: string, description: string, coverMediaId: string | null, coverMediaUrl: string | null, visibility: string, 
 /**
  * "draft" or "published".
  */

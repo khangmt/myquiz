@@ -38,6 +38,11 @@ pub struct Config {
     #[arg(long, env = "MAX_ACTIVE_GAMES", default_value_t = 200)]
     pub max_active_games: u32,
 
+    /// Where uploaded images are stored. Caddy serves this folder at
+    /// /media/ (SEC-11).
+    #[arg(long, env = "MEDIA_DIR", default_value = "/data/media")]
+    pub media_dir: String,
+
     #[command(flatten)]
     pub auth: AuthSettings,
 }

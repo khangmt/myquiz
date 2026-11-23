@@ -4,6 +4,7 @@ pub mod audit;
 pub mod auth;
 pub mod error;
 pub mod games;
+pub mod media;
 pub mod quizzes;
 pub mod ratelimit;
 
@@ -12,7 +13,11 @@ mod quiz_tests;
 #[cfg(test)]
 mod tests;
 
+use std::path::PathBuf;
 use std::sync::Arc;
+
+use axum::extract::DefaultBodyLimit;
+use tokio::sync::Semaphore;
 
 use axum::routing::{get, post};
 use axum::Router;
@@ -31,10 +36,15 @@ pub struct ApiState {
     pub live: LiveStore,
     pub retention_days: u32,
     pub max_active_games: u32,
+    pub media_dir: Arc<PathBuf>,
+    /// Image decoding is CPU heavy: at most 2 at once per process, so a
+    /// burst of uploads cannot starve the rest of the API.
+    pub image_permits: Arc<Semaphore>,
 }
 
 impl ApiState {
     pub fn new(app: AppState, cfg: &Config) -> anyhow::Result<Self> {
+        std::fs::create_dir_all(&cfg.media_dir)?;
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()?;
@@ -45,6 +55,8 @@ impl ApiState {
             http,
             retention_days: cfg.retention_days,
             max_active_games: cfg.max_active_games,
+            media_dir: Arc::new(PathBuf::from(&cfg.media_dir)),
+            image_permits: Arc::new(Semaphore::new(2)),
         })
     }
 }
@@ -65,11 +77,15 @@ pub fn router(state: ApiState) -> Router {
         .route("/quizzes/{id}/duplicate", post(quizzes::duplicate))
         .route("/quizzes/{id}/publish", post(quizzes::publish))
         .route("/games", post(games::create))
-        .route("/games/pin/{pin}", get(games::check_pin));
+        .route("/games/pin/{pin}", get(games::check_pin))
+        // SEC-21: 1 MB for everything but uploads.
+        .layer(RequestBodyLimitLayer::new(1024 * 1024));
+    let uploads = Router::new()
+        .route("/media", post(media::upload))
+        .layer(DefaultBodyLimit::disable())
+        .layer(RequestBodyLimitLayer::new(media::MAX_BODY));
     Router::new()
-        .nest("/api/v1", v1)
-        // SEC-21: 1 MB unless a route says otherwise (zip import, later).
-        .layer(RequestBodyLimitLayer::new(1024 * 1024))
+        .nest("/api/v1", v1.merge(uploads))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

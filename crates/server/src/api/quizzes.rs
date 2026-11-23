@@ -31,6 +31,7 @@ use uuid::Uuid;
 use super::audit::{audit, AuditEntry};
 use super::auth::AuthUser;
 use super::error::{ApiResult, AppError};
+use super::media::media_url;
 use super::ApiState;
 
 pub const DESCRIPTION_MAX: usize = 1000;
@@ -53,6 +54,7 @@ pub struct QuizRow {
     pub title: String,
     pub description: String,
     pub cover_media_id: Option<Uuid>,
+    pub cover_media_url: Option<String>,
     pub visibility: String,
     pub status: String,
     pub version: i32,
@@ -66,6 +68,7 @@ type RawRow = (
     String,
     String,
     Option<Uuid>,
+    Option<String>,
     String,
     String,
     i32,
@@ -73,7 +76,8 @@ type RawRow = (
     OffsetDateTime,
 );
 
-const ROW_COLUMNS: &str = "id, owner_id, title, description, cover_media_id, visibility::text, \
+const ROW_COLUMNS: &str = "id, owner_id, title, description, cover_media_id, \
+     (SELECT storage_key FROM media WHERE media.id = quizzes.cover_media_id), visibility::text, \
      status::text, version, updated_at, last_used_at + make_interval(days => $2)";
 
 /// Loads a live (not deleted) quiz the user owns, or any quiz for an admin
@@ -109,11 +113,12 @@ where
         title: r.2,
         description: r.3,
         cover_media_id: r.4,
-        visibility: r.5,
-        status: r.6,
-        version: r.7,
-        updated_at: r.8,
-        expires_at: r.9,
+        cover_media_url: r.5.as_deref().map(media_url),
+        visibility: r.6,
+        status: r.7,
+        version: r.8,
+        updated_at: r.9,
+        expires_at: r.10,
     })
 }
 
@@ -128,29 +133,32 @@ where
         String,
         String,
         Option<Uuid>,
+        Option<String>,
         i32,
         i32,
         Vec<String>,
         bool,
         serde_json::Value,
     )> = sqlx::query_as(
-        "SELECT q.type::text, q.text, q.media_id, q.time_limit_s, q.points, q.accepted_answers, \
-                q.ignore_diacritics, \
+        "SELECT q.type::text, q.text, q.media_id, m.storage_key, q.time_limit_s, q.points, \
+                q.accepted_answers, q.ignore_diacritics, \
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('text', o.text, 'correct', o.is_correct) \
                                            ORDER BY o.position) \
                           FROM question_options o WHERE o.question_id = q.id), '[]'::jsonb) \
-         FROM questions q WHERE q.quiz_id = $1 ORDER BY q.position",
+         FROM questions q LEFT JOIN media m ON m.id = q.media_id \
+         WHERE q.quiz_id = $1 ORDER BY q.position",
     )
     .bind(quiz_id)
     .fetch_all(db)
     .await?;
     rows.into_iter()
         .map(
-            |(kind, text, media, time, points, accepted, ignore, options)| {
+            |(kind, text, media, key, time, points, accepted, ignore, options)| {
                 Ok(QuestionDoc {
                     kind: serde_json::from_value(json!(kind))?,
                     text,
                     media_id: media.map(|m| m.to_string()),
+                    media_url: key.as_deref().map(media_url),
                     time_limit_s: time as u32,
                     points: points as u32,
                     options: serde_json::from_value(options)?,
@@ -169,6 +177,7 @@ fn doc(row: QuizRow, questions: Vec<QuestionDoc>) -> QuizDoc {
         title: row.title,
         description: row.description,
         cover_media_id: row.cover_media_id.map(|m| m.to_string()),
+        cover_media_url: row.cover_media_url,
         visibility: row.visibility,
         status: row.status,
         version: row.version,
@@ -178,7 +187,8 @@ fn doc(row: QuizRow, questions: Vec<QuestionDoc>) -> QuizDoc {
     }
 }
 
-/// The engine's view of an editor quiz: option ids 1..=n per question.
+/// The engine's view of an editor quiz: option ids 1..=n per question. The
+/// image is its URL, which is what players' screens need.
 pub fn to_snapshot(title: &str, questions: &[QuestionDoc]) -> QuizSnapshot {
     QuizSnapshot {
         title: title.to_string(),
@@ -187,7 +197,7 @@ pub fn to_snapshot(title: &str, questions: &[QuestionDoc]) -> QuizSnapshot {
             .map(|q| Question {
                 kind: q.kind,
                 text: q.text.clone(),
-                media: q.media_id.clone(),
+                media: q.media_url.clone().or_else(|| q.media_id.clone()),
                 time_limit_s: q.time_limit_s,
                 points: q.points,
                 options: q
@@ -742,6 +752,7 @@ mod unit {
             kind,
             text: "2 + 2?".into(),
             media_id: None,
+            media_url: None,
             time_limit_s: 20,
             points: 1000,
             options: vec![
