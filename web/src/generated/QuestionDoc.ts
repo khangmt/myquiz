@@ -6,7 +6,11 @@ export type QuestionDoc = { type: QuestionKind, text: string,
 /**
  * An image uploaded with POST /media.
  */
-mediaId: string | null, timeLimitS: number, 
+mediaId: string | null, 
+/**
+ * Where to show the image. Filled in by the server; ignored on save.
+ */
+mediaUrl: string | null, timeLimitS: number, 
 /**
  * 0, 1000 or 2000.
  */

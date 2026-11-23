@@ -26,6 +26,16 @@
 		}
 	}
 
+	# Uploaded images: random names, always WebP, never sniffed (SEC-11).
+	handle_path /media/* {
+		root * /media-files
+		header Cache-Control "public, max-age=31536000, immutable"
+		header Content-Type "image/webp"
+		@hidden path /.*
+		respond @hidden 404
+		file_server
+	}
+
 	# Any game server can serve any game (state is in Redis), so no stickiness.
 	handle /ws {
 		reverse_proxy game:8080 {

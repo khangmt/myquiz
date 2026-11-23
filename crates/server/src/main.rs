@@ -9,6 +9,7 @@ mod api;
 mod config;
 mod gateway;
 mod live;
+mod media;
 mod routes;
 mod state;
 

@@ -380,3 +380,123 @@ fn urlencode(s: &str) -> String {
         })
         .collect()
 }
+
+fn multipart(user: &User, parts: &[(&str, &[u8])]) -> Request<Body> {
+    let boundary = "myquiz-test-boundary";
+    let mut body = Vec::new();
+    for (name, bytes) in parts {
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"; \
+                 filename=\"x.png\"\r\nContent-Type: image/png\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(bytes);
+        body.extend_from_slice(b"\r\n");
+    }
+    body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+    Request::post("/api/v1/media")
+        .header(header::COOKIE, &user.cookie)
+        .header("X-CSRF-Token", &user.csrf)
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(body))
+        .unwrap()
+}
+
+fn png(w: u32, h: u32) -> Vec<u8> {
+    let img = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_fn(w, h, |x, _| {
+        image::Rgb([x as u8, 10, 200])
+    }));
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut out, image::ImageFormat::Png).unwrap();
+    out.into_inner()
+}
+
+#[tokio::test]
+async fn upload_an_image_and_use_it_in_a_quiz() {
+    let env = crate::api_env_or_skip!("");
+    let lan = user(&env).await;
+
+    let res = send(
+        &env.app,
+        multipart(
+            &lan,
+            &[("file", &png(2400, 1200)), ("alt", "Bản đồ".as_bytes())],
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let media = json_body(res).await;
+    assert_eq!(
+        (media["width"].as_u64(), media["height"].as_u64()),
+        (Some(1920), Some(960))
+    );
+    assert_eq!(media["altText"], "Bản đồ");
+    let url = media["url"].as_str().unwrap().to_string();
+    let key = url.strip_prefix("/media/").unwrap();
+    let dir = std::env::temp_dir().join("myquiz-test-media");
+    let stored = std::fs::read(dir.join(key)).unwrap();
+    assert_eq!(&stored[8..12], b"WEBP");
+
+    // Attach it to a question; the quiz shows its URL, and so does a game.
+    let mut q = question("Ở đâu?");
+    q["mediaId"] = media["id"].clone();
+    let mut body = quiz("Bản đồ", vec![q]);
+    body["coverMediaId"] = media["id"].clone();
+    let res = send(&env.app, lan.req("POST", "/api/v1/quizzes", Some(body))).await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let doc = json_body(res).await;
+    assert_eq!(doc["questions"][0]["mediaUrl"], json!(url));
+    assert_eq!(doc["coverMediaUrl"], json!(url));
+    let id = doc["id"].as_str().unwrap();
+    let res = send(
+        &env.app,
+        lan.req("POST", &format!("/api/v1/quizzes/{id}/publish"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = send(
+        &env.app,
+        lan.req("POST", "/api/v1/games", Some(json!({ "quizId": id }))),
+    )
+    .await;
+    let session: Uuid = json_body(res).await["sessionId"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let snap_media: Option<String> = sqlx::query_scalar(
+        "SELECT quiz_snapshot->'questions'->0->>'media' FROM game_sessions WHERE id = $1",
+    )
+    .bind(session)
+    .fetch_one(&env.db)
+    .await
+    .unwrap();
+    assert_eq!(snap_media.as_deref(), Some(url.as_str()));
+
+    // Not an image, whatever the name says.
+    let res = send(
+        &env.app,
+        multipart(&lan, &[("file", b"<svg onload=alert(1)>")]),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(json_body(res).await["error"]["code"], "NOT_AN_IMAGE");
+
+    // Over 5 MB.
+    let res = send(
+        &env.app,
+        multipart(&lan, &[("file", &vec![0u8; 5 * 1024 * 1024 + 10])]),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+    // Changes need the CSRF token.
+    let mut req = multipart(&lan, &[("file", &png(10, 10))]);
+    req.headers_mut().remove("X-CSRF-Token");
+    assert_eq!(send(&env.app, req).await.status(), StatusCode::FORBIDDEN);
+}

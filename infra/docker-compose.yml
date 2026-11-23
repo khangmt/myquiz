@@ -54,6 +54,8 @@ services:
       - "${HTTPS_PORT:-443}:443"
     volumes:
       - caddy_data:/data
+      # Uploaded images, read only; the api writes them (SEC-11).
+      - media_data:/media-files:ro
     depends_on: [api, game]
     deploy:
       resources:
@@ -63,6 +65,8 @@ services:
   api:
     <<: *app
     command: ["api"]
+    volumes:
+      - media_data:/data/media
     deploy:
       replicas: 2
       resources:
@@ -138,6 +142,7 @@ volumes:
   pg_data:
   redis_data:
   caddy_data:
+  media_data:
 
 networks:
   internal:

@@ -9,11 +9,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --release --locked -p myquiz && cp target/release/myquiz /myquiz
 
-# debian slim rather than distroless: libwebp (image uploads, later PR) needs libc.
+# debian slim rather than distroless: libwebp (statically linked) needs libc.
+# /data/media is created here so a new named volume inherits its owner.
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 myquiz
+    && useradd --system --uid 10001 myquiz \
+    && mkdir -p /data/media && chown myquiz /data/media
 COPY --from=build /myquiz /usr/local/bin/myquiz
 USER myquiz
 EXPOSE 8080
