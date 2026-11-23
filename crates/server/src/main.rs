@@ -5,6 +5,7 @@
 //! - `myquiz migrate` applies database migrations and exits.
 //! - `myquiz healthcheck` is the Docker health check (no curl in the image).
 
+mod api;
 mod config;
 mod gateway;
 mod live;
@@ -111,9 +112,16 @@ async fn serve(role: Role, cfg: Config) -> anyhow::Result<()> {
         // sqlx takes a PostgreSQL advisory lock, so two api replicas starting
         // together do not race.
         MIGRATOR.run(&state.db).await?;
+        if cfg.auth.app_secret.len() < 32 {
+            anyhow::bail!("APP_SECRET must be at least 32 characters");
+        }
     }
 
     let mut app = routes::router(state.clone());
+    if role == Role::Api {
+        let api_state = api::ApiState::new(state.clone(), cfg.auth.clone())?;
+        app = app.merge(api::router(api_state));
+    }
     if role == Role::Game {
         let hub = gateway::hub::Hub::start(state.redis.clone(), &cfg.redis_url).await?;
         let store = live::LiveStore::with_countdown(state.redis.clone(), cfg.countdown_ms);

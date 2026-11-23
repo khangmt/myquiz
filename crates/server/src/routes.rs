@@ -60,6 +60,7 @@ mod tests {
             redis_url,
             db_max_connections: 2,
             countdown_ms: 3000,
+            auth: crate::config::AuthSettings::for_tests(),
             log_json: false,
         };
         let state = AppState::connect(crate::Role::Api, &cfg).await.unwrap();

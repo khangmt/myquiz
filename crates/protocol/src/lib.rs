@@ -30,4 +30,31 @@ pub struct Health {
     pub role: String,
     pub version: String,
 }
+/// The signed-in user, from `GET /api/v1/me`. `csrfToken` goes back in the
+/// `X-CSRF-Token` header of every request that changes something (SEC-05).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct Me {
+    pub id: String,
+    pub email: String,
+    pub display_name: String,
+    /// "user" or "admin".
+    pub role: String,
+    /// "vi" or "en".
+    pub locale: String,
+    pub csrf_token: String,
+}
+
+/// Body of `PATCH /api/v1/me`. Missing fields stay as they are.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct UpdateMe {
+    #[ts(optional)]
+    pub display_name: Option<String>,
+    #[ts(optional)]
+    pub locale: Option<String>,
+}
+
 pub mod ws;
