@@ -27,3 +27,11 @@ pub fn kicked(pin: &str) -> String {
 pub fn answers(pin: &str, index: usize) -> String {
     format!("game:{pin}:ans:{index}")
 }
+/// Player id to number of open sockets on any server.
+pub fn online(pin: &str) -> String {
+    format!("game:{pin}:online")
+}
+/// Login session written by the auth module (design section 9, SEC-04).
+pub fn login_session(sid: &str) -> String {
+    format!("session:{sid}")
+}

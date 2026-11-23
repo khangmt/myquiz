@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use ts_rs::TS;
 
 /// Option ids are small integers, stable within one snapshot.
 pub type OptionId = u32;
@@ -24,8 +25,9 @@ pub const ALLOWED_POINTS: [u32; 3] = [0, 1000, 2000];
 /// The marker a fill-in-the-blank question uses for its one blank (FR-QZ-04).
 pub const BLANK_MARKER: &str = "___";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../web/src/generated/")]
 pub enum QuestionKind {
     /// Multiple choice, exactly one correct option.
     Single,

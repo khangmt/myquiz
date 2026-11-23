@@ -4,6 +4,8 @@
 use rand::{rngs::OsRng, TryRngCore};
 use sha2::{Digest, Sha256};
 
+// Used by POST /games, which arrives with the REST API.
+#[allow(dead_code)]
 /// A random 6-digit PIN, 100000..=999999 so it never starts with 0.
 pub fn new_pin() -> String {
     loop {

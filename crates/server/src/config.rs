@@ -20,6 +20,10 @@ pub struct Config {
     #[arg(long, env = "DB_MAX_CONNECTIONS", default_value_t = 10)]
     pub db_max_connections: u32,
 
+    /// "Get ready" countdown before each question's options show, in ms.
+    #[arg(long, env = "COUNTDOWN_MS", default_value_t = 3000)]
+    pub countdown_ms: u64,
+
     /// Log as JSON lines (production) instead of human-readable text.
     #[arg(long, env = "LOG_JSON", default_value_t = false)]
     pub log_json: bool,

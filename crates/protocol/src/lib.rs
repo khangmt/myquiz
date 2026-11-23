@@ -30,3 +30,4 @@ pub struct Health {
     pub role: String,
     pub version: String,
 }
+pub mod ws;

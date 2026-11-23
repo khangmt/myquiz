@@ -14,6 +14,7 @@ use super::keys;
 /// Keys of a game live 24 h after it ends, and at most 24 h before.
 pub const GAME_TTL_S: u64 = 24 * 60 * 60;
 /// The "get ready" countdown before options show (FR-GM-05, NFR-02).
+#[allow(dead_code)] // default for LiveStore::new
 pub const COUNTDOWN_MS: u64 = 3_000;
 pub const MAX_PLAYERS: u32 = 200;
 
@@ -29,6 +30,7 @@ macro_rules! script {
     };
 }
 
+#[allow(dead_code)] // POST /games, with the REST API
 static CREATE: LazyLock<Script> = script!("create");
 static JOIN: LazyLock<Script> = script!("join");
 static KICK: LazyLock<Script> = script!("kick");
@@ -38,6 +40,7 @@ static ANSWER: LazyLock<Script> = script!("answer");
 static DUE: LazyLock<Script> = script!("due");
 static SCORES: LazyLock<Script> = script!("scores");
 static FINISH: LazyLock<Script> = script!("finish");
+static CLOCK: LazyLock<Script> = script!("clock");
 
 /// A player as stored in `game:<pin>:players`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -154,11 +157,67 @@ fn text(v: &Value) -> Result<String> {
 #[derive(Clone)]
 pub struct LiveStore {
     redis: Pool,
+    countdown_ms: u64,
 }
 
 impl LiveStore {
+    #[allow(dead_code)]
     pub fn new(redis: Pool) -> Self {
-        Self { redis }
+        Self::with_countdown(redis, COUNTDOWN_MS)
+    }
+
+    /// Tests shorten the "get ready" countdown.
+    pub fn with_countdown(redis: Pool, countdown_ms: u64) -> Self {
+        Self {
+            redis,
+            countdown_ms,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn redis(&self) -> &Pool {
+        &self.redis
+    }
+
+    /// The Redis server clock, which every deadline uses (ms since epoch).
+    pub async fn now_ms(&self) -> Result<u64> {
+        Ok(int(&self.run(&CLOCK, vec![], vec![]).await?)? as u64)
+    }
+
+    /// Counts a socket opening (+1) or closing (-1) for a player.
+    pub async fn set_online(&self, pin: &str, player_id: &str, delta: i64) -> Result<()> {
+        let n: i64 = self
+            .redis
+            .hincrby(keys::online(pin), player_id, delta)
+            .await?;
+        if n <= 0 {
+            let _: i64 = self.redis.hdel(keys::online(pin), player_id).await?;
+        } else {
+            let _: bool = self
+                .redis
+                .expire(keys::online(pin), GAME_TTL_S as i64, None)
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Players with at least one open socket.
+    pub async fn connected(&self, pin: &str) -> Result<u32> {
+        let vals: Vec<i64> = self.redis.hvals(keys::online(pin)).await?;
+        Ok(vals.into_iter().filter(|v| *v > 0).count() as u32)
+    }
+
+    /// Whether a player has an answer stored for question `index`.
+    pub async fn has_answered(&self, pin: &str, index: usize, player_id: &str) -> Result<bool> {
+        Ok(self
+            .redis
+            .hexists(keys::answers(pin, index), player_id)
+            .await?)
+    }
+
+    /// The user id behind a login session cookie, if the session exists.
+    pub async fn login_user(&self, sid: &str) -> Result<Option<String>> {
+        Ok(self.redis.hget(keys::login_session(sid), "user_id").await?)
     }
 
     async fn run(&self, script: &Script, keys: Vec<String>, args: Vec<String>) -> Result<Value> {
@@ -169,6 +228,7 @@ impl LiveStore {
 
     /// Claims a fresh PIN and creates the game in the lobby (FR-GM-01).
     /// Draws again on collision; returns the PIN.
+    #[allow(dead_code)] // POST /games, with the REST API
     pub async fn create_game(
         &self,
         session: &str,
@@ -335,7 +395,7 @@ impl LiveStore {
                     from_i,
                     to_s.into(),
                     to_i,
-                    COUNTDOWN_MS.to_string(),
+                    self.countdown_ms.to_string(),
                     time_limit_ms.to_string(),
                 ],
             )
@@ -494,6 +554,7 @@ impl LiveStore {
             keys::tokens(pin),
             keys::nicks(pin),
             keys::kicked(pin),
+            keys::online(pin),
         ];
         k.extend((0..meta.total).map(|i| keys::answers(pin, i)));
         let out = self

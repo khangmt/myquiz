@@ -9,3 +9,4 @@ description = "REST bodies and WebSocket messages shared with the frontend (expo
 serde.workspace = true
 serde_json.workspace = true
 ts-rs.workspace = true
+myquiz-engine.workspace = true

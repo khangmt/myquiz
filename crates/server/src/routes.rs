@@ -59,6 +59,7 @@ mod tests {
             database_url,
             redis_url,
             db_max_connections: 2,
+            countdown_ms: 3000,
             log_json: false,
         };
         let state = AppState::connect(crate::Role::Api, &cfg).await.unwrap();

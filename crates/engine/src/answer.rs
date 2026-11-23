@@ -7,12 +7,14 @@
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use ts_rs::TS;
 
 use crate::quiz::{OptionId, Question, QuestionKind, TEXT_ANSWER_MAX};
 use crate::state::GameState;
 
 /// What a player sends in `answer:submit`.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../../web/src/generated/")]
 pub struct Submission {
     #[serde(default, rename = "optionIds")]
     pub option_ids: Vec<OptionId>,
@@ -21,8 +23,9 @@ pub struct Submission {
 }
 
 /// Refusal codes sent back in the ack (design section 7).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error, Serialize, Deserialize, TS)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[ts(export, export_to = "../../../web/src/generated/")]
 pub enum SubmitError {
     /// The payload does not fit the question (wrong ids, empty text, too long).
     #[error("answer does not fit the question")]
