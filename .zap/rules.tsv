@@ -1,0 +1,18 @@
+# ZAP baseline rules (SEC-29). FAIL fails CI, WARN is reported, IGNORE is
+# dropped with the reason given. Columns are tab separated.
+10010	FAIL	(Cookie No HttpOnly Flag)
+10020	FAIL	(Missing Anti-clickjacking Header)
+10021	FAIL	(X-Content-Type-Options Header Missing)
+10023	FAIL	(Information Disclosure - Debug Error Messages)
+10036	FAIL	(Server Leaks Version Information via Server header)
+10037	FAIL	(Server Leaks Information via X-Powered-By)
+10038	FAIL	(Content Security Policy Header Not Set)
+10054	FAIL	(Cookie without SameSite Attribute)
+10098	FAIL	(Cross-Domain Misconfiguration)
+90022	FAIL	(Application Error Disclosure)
+10035	IGNORE	(Strict-Transport-Security: CI runs over plain HTTP; Caddy sends HSTS)
+10027	IGNORE	(Suspicious Comments: matches words inside the minified React bundle)
+10096	IGNORE	(Timestamp Disclosure: numbers in the minified bundle)
+10109	IGNORE	(Modern Web Application: informational)
+10049	IGNORE	(Storable and Cacheable Content: informational)
+10202	IGNORE	(Absence of Anti-CSRF Tokens: changes need the X-CSRF-Token header, not a form field)

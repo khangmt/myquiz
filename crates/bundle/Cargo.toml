@@ -1,6 +1,7 @@
 [package]
 name = "myquiz-bundle"
 version = "0.1.0"
+publish = false
 edition.workspace = true
 license.workspace = true
 description = "The quiz zip format: reading and writing quiz bundles safely (FR-QZ-15..17, SEC-31..33)."

@@ -1,6 +1,7 @@
 [package]
 name = "myquiz"
 version = "0.1.0"
+publish = false
 edition.workspace = true
 license.workspace = true
 description = "The myquiz server: `myquiz api` for REST, `myquiz game` for live games."

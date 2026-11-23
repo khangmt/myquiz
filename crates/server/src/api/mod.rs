@@ -23,8 +23,10 @@ use std::sync::Arc;
 use axum::extract::DefaultBodyLimit;
 use tokio::sync::Semaphore;
 
+use axum::http::{header, HeaderValue};
 use axum::routing::{get, post};
 use axum::Router;
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 
 use crate::config::{AuthSettings, Config};
@@ -77,6 +79,10 @@ async fn client_config(
     })
 }
 
+/// SEC-26, defence in depth: Caddy sets the page headers, but API answers
+/// carry their own so they stay safe if something else ever serves them.
+/// API data is per user, so nothing is cached. A handler that sets its own
+/// header (a download) keeps it.
 pub fn router(state: ApiState) -> Router {
     let v1 = Router::new()
         .route("/auth/google", get(auth::google_start))
@@ -118,6 +124,21 @@ pub fn router(state: ApiState) -> Router {
         .layer(RequestBodyLimitLayer::new(zip::MAX_IMPORT_BODY + 64 * 1024));
     Router::new()
         .nest("/api/v1", v1.merge(uploads).merge(imports))
+        // SEC-26, defence in depth: Caddy sets the page headers, but API
+        // answers carry their own too. API data is per user, so nothing is
+        // cached. A handler that sets its own header (a download) keeps it.
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-store"),
+        ))
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static("default-src 'none'; frame-ancestors 'none'"),
+        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

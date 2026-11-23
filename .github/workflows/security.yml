@@ -1,0 +1,124 @@
+name: Security
+
+# SEC-27 and SEC-29: static analysis, licence and source checks, container
+# scans and an OWASP ZAP baseline scan of the running stack. Runs on every
+# pull request, on main, and weekly so new advisories show up even when
+# nothing changes.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 20 * * 0" # Monday 03:00 Vietnam time
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    container: semgrep/semgrep:1.99.0
+    steps:
+      - uses: actions/checkout@v4
+      # Errors fail the build; lower findings are printed for review.
+      - run: >-
+          semgrep scan --metrics=off --error --severity ERROR
+          --config p/rust --config p/typescript --config p/react
+          --config p/secrets --config p/dockerfile
+
+  cargo-deny:
+    name: Licences and sources (cargo deny)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check bans licenses sources
+
+  trivy:
+    name: Container scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/server.Dockerfile
+          load: true
+          tags: myquiz-server:scan
+          cache-from: type=gha,scope=server
+      - name: Caddy + web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/caddy.Dockerfile
+          load: true
+          tags: myquiz-caddy:scan
+          cache-from: type=gha,scope=caddy
+      # Trivy runs from its own image, pinned, with the Docker socket so it
+      # can read the images just built.
+      # Critical issues with a fix must be fixed before release (SEC-27).
+      - name: Our images, critical (blocking)
+        run: |
+          for img in myquiz-server:scan myquiz-caddy:scan; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy:0.58.1 image --quiet --severity CRITICAL --ignore-unfixed \
+              --exit-code 1 "$img"
+          done
+      # High findings and the database images are reported, not blocking.
+      - name: All images, high (report only)
+        run: |
+          for img in myquiz-server:scan myquiz-caddy:scan postgres:16 redis:7; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy:0.58.1 image --quiet --severity HIGH,CRITICAL --ignore-unfixed "$img"
+          done
+      - name: Compose and Dockerfiles (report only)
+        run: |
+          docker run --rm -v "$PWD/infra:/infra:ro" aquasec/trivy:0.58.1 config --quiet /infra
+
+  zap:
+    name: OWASP ZAP baseline
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_PASSWORD: ci-postgres
+      REDIS_PASSWORD: ci-redis
+      APP_SECRET: ci-secret-not-used-anywhere-else-0123456789
+      PUBLIC_URL: http://localhost:8080
+      COOKIE_SECURE: "false"
+      HTTP_PORT: "8080"
+      HTTPS_PORT: "8443"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack
+        run: docker compose -f infra/docker-compose.yml up -d --build --wait
+      - name: Wait for the site
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8080/api/v1/config && exit 0
+            sleep 2
+          done
+          docker compose -f infra/docker-compose.yml logs --tail 50
+          exit 1
+      # -I: warnings are reported but only FAIL rules (see .zap/rules.tsv)
+      # fail the job.
+      - name: Baseline scan
+        run: |
+          docker run --rm --network host -v "$PWD/.zap:/zap/wrk:rw" -u root \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:8080 -c rules.tsv -r zap-report.html -I -j
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-report
+          path: .zap/zap-report.html
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f infra/docker-compose.yml down -v

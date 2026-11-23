@@ -107,3 +107,19 @@ docker compose exec api myquiz admin someone@uit.edu.vn --revoke   # back to a n
 ```
 
 Both are written to the audit log.
+
+## Security checks
+
+The `Security` workflow runs on every pull request, on main and every week:
+
+- **Semgrep** (SAST): Rust, TypeScript, React, secrets and Dockerfile rules.
+  Findings rated ERROR fail the build.
+- **cargo deny**: licences (permissive only), banned crates and crate
+  sources. Known advisories are checked by `cargo audit` in CI.
+- **Trivy**: both images. A critical issue that has a fix fails the build;
+  high issues and the PostgreSQL and Redis images are reported.
+- **OWASP ZAP baseline**: starts the whole stack with Docker Compose and
+  scans it. Rules and the reason for each ignore are in `.zap/rules.tsv`.
+  The HTML report is attached to the run.
+
+Dependabot opens weekly update PRs for Cargo, npm, Docker and Actions.
