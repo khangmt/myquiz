@@ -1,0 +1,42 @@
+# SITE_ADDRESS is a domain in production (automatic HTTPS, SEC-01) or ":80"
+# when the faculty reverse proxy terminates TLS in front of us.
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	# Security headers (SEC-26). HSTS only matters when we terminate TLS.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	# /healthz and /metrics are internal only (NFR-05, NFR-16).
+	@internal path /healthz /metrics
+	handle @internal {
+		respond 404
+	}
+
+	handle /api/* {
+		reverse_proxy api:8080 {
+			lb_policy round_robin
+			health_uri /healthz
+		}
+	}
+
+	# Any game server can serve any game (state is in Redis), so no stickiness.
+	handle /ws {
+		reverse_proxy game:8080 {
+			lb_policy least_conn
+			health_uri /healthz
+		}
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,0 +1,5 @@
+{
+  "app": { "name": "myquiz", "tagline": "Tạo câu đố, chơi trực tiếp và tải báo cáo." },
+  "home": { "join": "Tham gia trò chơi", "pinPlaceholder": "Mã PIN", "signIn": "Đăng nhập bằng Google" },
+  "language": "Ngôn ngữ"
+}
