@@ -1,6 +1,6 @@
 # Nightly encrypted backups. Same PostgreSQL major version as the database,
 # so pg_dump matches the server.
-FROM postgres:16
+FROM postgres:18
 RUN apt-get update && apt-get install -y --no-install-recommends age \
     && rm -rf /var/lib/apt/lists/*
 COPY infra/backup/backup.sh infra/backup/restore.sh /usr/local/bin/
