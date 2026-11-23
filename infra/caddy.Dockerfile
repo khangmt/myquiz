@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Caddy serving the built React app, plus the reverse proxy rules.
-FROM node:22-bookworm-slim AS web
+FROM node:26-bookworm-slim AS web
 RUN corepack enable
 WORKDIR /web
 COPY web/package.json web/pnpm-lock.yaml ./
