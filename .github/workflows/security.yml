@@ -63,21 +63,16 @@ jobs:
           load: true
           tags: myquiz-caddy:scan
           cache-from: type=gha,scope=caddy
+      # Trivy runs from its own image, pinned, with the Docker socket so it
+      # can read the images just built.
       # Critical issues with a fix must be fixed before release (SEC-27).
-      - name: Server image, critical
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: myquiz-server:scan
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-      - name: Caddy image, critical
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: myquiz-caddy:scan
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
+      - name: Our images, critical (blocking)
+        run: |
+          for img in myquiz-server:scan myquiz-caddy:scan; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy:0.58.1 image --quiet --severity CRITICAL --ignore-unfixed \
+              --exit-code 1 "$img"
+          done
       # High findings and the database images are reported, not blocking.
       - name: All images, high (report only)
         run: |
@@ -86,11 +81,8 @@ jobs:
               aquasec/trivy:0.58.1 image --quiet --severity HIGH,CRITICAL --ignore-unfixed "$img"
           done
       - name: Compose and Dockerfiles (report only)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: config
-          scan-ref: infra
-          exit-code: "0"
+        run: |
+          docker run --rm -v "$PWD/infra:/infra:ro" aquasec/trivy:0.58.1 config --quiet /infra
 
   zap:
     name: OWASP ZAP baseline
