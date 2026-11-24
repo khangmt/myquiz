@@ -2,7 +2,10 @@
 import type { GameState } from "./GameState";
 import type { LobbyPlayer } from "./LobbyPlayer";
 import type { MyStanding } from "./MyStanding";
+import type { QuestionResult } from "./QuestionResult";
+import type { QuestionReveal } from "./QuestionReveal";
 import type { QuestionStart } from "./QuestionStart";
+import type { ScoreRow } from "./ScoreRow";
 
 /**
  * Sent on host:attach, player:join and player:resume so a (re)connecting
@@ -21,4 +24,17 @@ me: MyStanding | null,
  * For the host: the game's id, which names its report
  * (`/reports/<id>`). Null for players.
  */
-reportId: string | null, };
+reportId: string | null, 
+/**
+ * While answers are revealed, for the host: the correct answer and
+ * how players answered. Null otherwise.
+ */
+reveal: QuestionReveal | null, 
+/**
+ * While answers are revealed, for a player: their own result.
+ */
+result: QuestionResult | null, 
+/**
+ * On the leaderboard and podium: the rows on screen.
+ */
+top: Array<ScoreRow> | null, };

@@ -104,6 +104,13 @@ wire! {
         /// For the host: the game's id, which names its report
         /// (`/reports/<id>`). Null for players.
         pub report_id: Option<String>,
+        /// While answers are revealed, for the host: the correct answer and
+        /// how players answered. Null otherwise.
+        pub reveal: Option<QuestionReveal>,
+        /// While answers are revealed, for a player: their own result.
+        pub result: Option<QuestionResult>,
+        /// On the leaderboard and podium: the rows on screen.
+        pub top: Option<Vec<ScoreRow>>,
     }
 
     pub struct PlayerJoined { pub player_id: String, pub token: String, pub snapshot: GameSnapshot }

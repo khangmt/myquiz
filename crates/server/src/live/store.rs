@@ -512,6 +512,29 @@ impl LiveStore {
             .map(Some)
     }
 
+    /// The answers stored for question `index`, read only. A screen that
+    /// reconnects during the reveal uses them to draw the result again.
+    pub async fn answers(&self, pin: &str, index: usize) -> Result<Vec<StoredAnswer<String>>> {
+        let pairs: std::collections::HashMap<String, String> =
+            self.redis.hgetall(keys::answers(pin, index)).await?;
+        #[derive(Deserialize)]
+        struct Stored {
+            r: u64,
+            s: Submission,
+        }
+        pairs
+            .into_iter()
+            .map(|(player, json)| {
+                let stored: Stored = serde_json::from_str(&json)?;
+                Ok(StoredAnswer {
+                    player,
+                    submission: stored.s,
+                    response_ms: stored.r,
+                })
+            })
+            .collect()
+    }
+
     /// PINs whose current question is past its deadline.
     pub async fn due(&self, limit: usize) -> Result<Vec<String>> {
         let out = array(
