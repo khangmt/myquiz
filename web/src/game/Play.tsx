@@ -185,6 +185,12 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
         return setView({ kind: "lobby" });
       case "question":
         return s.question ? setView({ kind: "question", q: s.question, sent: !!s.me?.answered }) : setView({ kind: "waiting" });
+      case "reveal":
+        return s.result ? setView({ kind: "result", r: s.result }) : setView({ kind: "waiting" });
+      case "leaderboard":
+        return s.top ? setView({ kind: "leaderboard", top: s.top }) : setView({ kind: "waiting" });
+      case "podium":
+        return s.top ? setView({ kind: "podium", top: s.top }) : setView({ kind: "waiting" });
       case "ended":
         return setView({ kind: "ended", reason: "finished" });
       default:

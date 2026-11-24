@@ -113,6 +113,57 @@ impl GameService {
             }
             None => None,
         };
+        // A screen that reconnects after the question ended must draw the
+        // same view the pushes drew: the reveal, the leaderboard or the podium.
+        let (mut reveal, mut result, mut top) = (None, None, None);
+        match meta.state {
+            GameState::Reveal { index } => {
+                let quiz = self.quiz(pin).await?;
+                let q = quiz.question(index).context("bad index")?;
+                let answers = self.store.answers(pin, index).await?;
+                let outcome = score_question(q, &answers);
+                let revealed = RevealedAnswer::from_question(q);
+                match &me {
+                    None => {
+                        reveal = Some(QuestionReveal {
+                            index,
+                            correct_option_ids: revealed.correct_option_ids,
+                            accepted_answers: revealed.accepted_answers,
+                            distribution: outcome.distribution,
+                            top_text_answers: outcome.top_text_answers,
+                        });
+                    }
+                    Some(mine) => {
+                        let res = outcome.results.iter().find(|r| r.player == mine.player_id);
+                        result = Some(QuestionResult {
+                            index,
+                            answered: res.is_some(),
+                            correct: res.is_some_and(|r| r.correct),
+                            points: res.map_or(0, |r| r.points),
+                            total: mine.score,
+                            rank: mine.rank,
+                            correct_option_ids: revealed.correct_option_ids,
+                        });
+                    }
+                }
+            }
+            GameState::Leaderboard { .. } => top = Some(rows(leaderboard(&ranked(&players)))),
+            GameState::Podium => top = Some(rows(podium(&ranked(&players)))),
+            _ => {}
+        }
+        // The host's reveal screen also shows the question it reveals.
+        let question = match (question, meta.state) {
+            (None, GameState::Reveal { index }) if for_host => {
+                let quiz = self.quiz(pin).await?;
+                let q = quiz.question(index).context("bad index")?;
+                Some(QuestionStart {
+                    question: PublicQuestion::from_question(index, quiz.total(), q),
+                    starts_at: meta.starts_at_ms,
+                    ends_at: meta.ends_at_ms,
+                })
+            }
+            (q, _) => q,
+        };
         Ok(GameSnapshot {
             pin: pin.to_string(),
             state: meta.state,
@@ -121,6 +172,9 @@ impl GameService {
             question,
             report_id: for_host.then(|| meta.session.clone()),
             me,
+            reveal,
+            result,
+            top,
         })
     }
 

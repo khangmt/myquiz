@@ -383,6 +383,26 @@ async fn three_bots_play_a_full_game() {
     );
     bots[1].push("question:result").await;
 
+    // A host or player who reloads during the reveal gets the same screen
+    // back: the reveal for the host, their own result for a player.
+    let mut host2 = Bot::connect(&env.addr, Some(&sid)).await;
+    let snap = host2.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["state"], json!({ "state": "reveal", "index": 0 }));
+    assert_eq!(snap["question"]["index"], 0);
+    assert_eq!(snap["reveal"]["correctOptionIds"], json!([1]));
+    assert_eq!(snap["reveal"]["distribution"], reveal["distribution"]);
+    let mut chi_again = Bot::connect(&env.addr, None).await;
+    let snap = chi_again
+        .ok("player:resume", json!({ "pin": pin, "token": tokens[2] }))
+        .await;
+    assert_eq!(snap["result"]["correct"], json!(false));
+    assert_eq!(snap["result"]["rank"], json!(3));
+    assert!(
+        snap["reveal"].is_null(),
+        "players never get the distribution"
+    );
+    drop(chi_again);
+
     // Leaderboard; a double click is refused.
     let reveal_state = json!({ "state": "reveal", "index": 0 });
     host.ok("host:next", json!({ "expect": reveal_state }))
@@ -395,6 +415,12 @@ async fn three_bots_play_a_full_game() {
     let board = bots[2].push("leaderboard:show").await;
     assert_eq!(board["top"][0]["nickname"], "An");
     assert_eq!(board["top"].as_array().unwrap().len(), 3);
+    let snap = host2.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(
+        snap["top"], board["top"],
+        "a reload shows the same leaderboard"
+    );
+    drop(host2);
 
     // Question 1. Chi drops and resumes; only An answers, so the deadline
     // sweep reveals it after the 5 s limit.

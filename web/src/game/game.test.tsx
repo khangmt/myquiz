@@ -36,7 +36,7 @@ class FakeSocket {
   }
 }
 
-const lobby = { pin: "123456", state: { state: "lobby" }, locked: false, players: [], question: null, me: null, reportId: null };
+const lobby = { pin: "123456", state: { state: "lobby" }, locked: false, players: [], question: null, me: null, reportId: null, reveal: null, result: null, top: null };
 const question = (over: object = {}) => ({
   startsAt: Date.now() - 1000,
   endsAt: Date.now() + 20_000,
@@ -164,4 +164,45 @@ test("a player who runs out of time sees time's up, not wrong", async () => {
   ws.push("question:result", { index: 0, answered: false, correct: false, points: 0, total: 0, rank: 2, correctOptionIds: [0] });
   expect(await screen.findByText("Hết giờ!")).toBeTruthy();
   expect(screen.queryByText("Chưa đúng")).toBeNull();
+});
+
+test("a host who reloads during the reveal, leaderboard or podium sees that screen again", async () => {
+  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : url.endsWith("/config") ? { status: 200, body: { joinUrl: null } } : undefined));
+  renderApp("/host/123456");
+  let ws = await socket();
+  ws.ack("host:attach", {
+    ...lobby,
+    state: { state: "reveal", index: 0 },
+    question: question(),
+    reveal: { index: 0, correctOptionIds: [0], acceptedAnswers: [], distribution: [{ optionId: 0, count: 2 }], topTextAnswers: [] },
+  });
+  expect(await screen.findByText("Thủ đô của Việt Nam?")).toBeTruthy();
+  fireEvent.click(await screen.findByText("Tiếp"));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "host:next", d: { expect: { state: "reveal", index: 0 } } });
+
+  ws.close();
+  ws = await waitFor(() => {
+    const s = FakeSocket.all.at(-1)!;
+    if (s === ws || !s.sent.length) throw new Error("not reconnected yet");
+    return s;
+  }, { timeout: 5000 });
+  ws.ack("host:attach", { ...lobby, state: { state: "podium" }, top: [{ nickname: "An", score: 1972 }, { nickname: "Chi", score: 1734 }] });
+  expect(await screen.findByText("Vinh danh")).toBeTruthy();
+  expect(screen.getByText(/An/)).toBeTruthy();
+  expect(screen.getByText(/1972/)).toBeTruthy();
+});
+
+test("a player who reloads on the leaderboard or during the reveal sees it again", async () => {
+  localStorage.setItem("myquiz.player.123456", "tok-9");
+  mockFetch(() => undefined);
+  renderApp("/join?pin=123456");
+  const ws = await socket();
+  const me = { playerId: "p1", nickname: "Lan", score: 950, rank: 1, answered: false };
+  ws.ack("player:resume", {
+    ...lobby,
+    state: { state: "reveal", index: 0 },
+    me,
+    result: { index: 0, answered: true, correct: true, points: 950, total: 950, rank: 1, correctOptionIds: [0] },
+  });
+  expect(await screen.findByText("Chính xác!")).toBeTruthy();
 });

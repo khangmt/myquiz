@@ -55,6 +55,15 @@ export function Host() {
         return s.question
           ? setView({ kind: "question", q: s.question, answered: 0, connected: s.players.length })
           : setView({ kind: "between" });
+      case "reveal":
+        if (s.question) lastQuestion.current = s.question;
+        return s.reveal
+          ? setView({ kind: "reveal", q: s.question, reveal: s.reveal })
+          : setView({ kind: "between" });
+      case "leaderboard":
+        return s.top ? setView({ kind: "leaderboard", top: s.top }) : setView({ kind: "between" });
+      case "podium":
+        return s.top ? setView({ kind: "podium", top: s.top }) : setView({ kind: "between" });
       case "ended":
         return setView({ kind: "ended", reason: "finished" });
       default:
