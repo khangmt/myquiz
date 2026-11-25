@@ -1,0 +1,114 @@
+#!/bin/bash
+# myquiz-deploy: pull the newest GitHub release of khangmt/myquiz and switch
+# the running app to it. Run by the user timer myquiz-deploy.timer every
+# 5 minutes; safe to run by hand. No sudo, no inbound connection needed.
+#
+#  1. Asks GitHub for the latest release (public API, no token).
+#  2. Does nothing if it is already running, marked bad, or a game is live.
+#  3. Downloads it, checks SHA256SUMS, unpacks it under releases/, and checks
+#     the binary starts on this machine.
+#  4. Points the `current` symlink at it, restarts api and game, and checks
+#     /healthz on both and the site through Caddy.
+#  5. If a check fails, points `current` back, restarts, and marks the
+#     release bad so it is not tried again.
+#
+# Note: the api applies new database migrations when it starts. A rollback
+# puts the old binary back but does not undo a migration.
+set -euo pipefail
+
+D=${MYQUIZ_DIR:-/local/khangmt/myquiz}
+REPO=${MYQUIZ_REPO:-khangmt/myquiz}
+API=${MYQUIZ_API:-https://api.github.com}
+S=$D/deploy
+mkdir -p "$S" "$D/releases"
+exec 9>"$S/lock"
+flock -n 9 || exit 0
+
+log() { echo "$(date -u +%FT%TZ) $*" | tee -a "$S/deploy.log"; }
+ua="myquiz-deploy (+https://github.com/$REPO)"
+
+code=$(curl -sS --max-time 20 -A "$ua" -H "Accept: application/vnd.github+json" \
+  -o "$S/latest.json" -w '%{http_code}' "$API/repos/$REPO/releases/latest") || code=000
+case $code in
+  200) release=$(cat "$S/latest.json") ;;
+  404) exit 0 ;; # no release published yet
+  *) log "skip: GitHub answered $code"; exit 0 ;;
+esac
+tag=$(jq -r '.tag_name // empty' <<<"$release")
+[[ $tag =~ ^deploy-[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$ ]] || { log "skip: latest release '$tag' is not a deploy release"; exit 0; }
+
+current=$(basename "$(readlink "$D/current" 2>/dev/null || echo none)")
+[[ $tag == "$current" ]] && exit 0
+if grep -qxF "$tag" "$S/bad" 2>/dev/null; then exit 0; fi
+
+# Never restart in the middle of a game: a game that has not ended and still
+# has a player connected makes the deploy wait. Abandoned games (nobody
+# connected) do not block it.
+rpass=$(grep '^REDIS_PASSWORD=' "$D/app.env" | cut -d= -f2)
+redis() { "$D/env/bin/redis-cli" -p 16379 -a "$rpass" --no-auth-warning "$@"; }
+live=0
+while read -r key; do
+  [[ $key =~ ^game:[0-9]+$ ]] || continue
+  state=$(redis HGET "$key" state)
+  [[ -n $state && $state != ended ]] || continue
+  online=$(redis HVALS "$key:online" | awk '$1 > 0' | wc -l)
+  ((online > 0)) && live=$((live + 1))
+done < <(redis --scan --pattern 'game:*')
+if ((live > 0)); then log "wait: $tag is ready but $live game(s) are running"; exit 0; fi
+
+# Download and verify.
+tmp=$(mktemp -d "$S/dl.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+asset() { jq -r --arg n "$1" '.assets[] | select(.name == $n) | .browser_download_url' <<<"$release"; }
+tarball="myquiz-$tag.tar.gz"
+for name in "$tarball" SHA256SUMS; do
+  url=$(asset "$name")
+  [[ -n $url ]] || { log "skip: $tag has no $name"; exit 0; }
+  curl -fsSL --max-time 300 -A "$ua" -o "$tmp/$name" "$url"
+done
+(cd "$tmp" && sha256sum -c --status SHA256SUMS) || { log "BAD: $tag checksum mismatch"; echo "$tag" >>"$S/bad"; exit 1; }
+tar -C "$tmp" -xzf "$tmp/$tarball"
+[[ -x $tmp/$tag/myquiz && -f $tmp/$tag/web/index.html ]] || { log "BAD: $tag is incomplete"; echo "$tag" >>"$S/bad"; exit 1; }
+if ! "$tmp/$tag/myquiz" --help >/dev/null 2>&1; then
+  log "BAD: $tag binary does not start here"; echo "$tag" >>"$S/bad"; exit 1
+fi
+rm -rf "$D/releases/$tag"
+mv "$tmp/$tag" "$D/releases/$tag"
+
+switch() {
+  ln -sfn "releases/$1" "$D/current.tmp"
+  mv -T "$D/current.tmp" "$D/current"
+  systemctl --user restart mq-api mq-game
+}
+healthy() {
+  local _
+  for _ in $(seq 30); do
+    if curl -fsS --max-time 3 -o /dev/null http://127.0.0.1:18081/healthz &&
+       curl -fsS --max-time 3 -o /dev/null http://127.0.0.1:18082/healthz &&
+       curl -fsS --max-time 3 http://127.0.0.1:8080/api/v1/health | grep -q '"status":"ok"' &&
+       curl -fsS --max-time 3 -o /dev/null http://127.0.0.1:8080/; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+
+log "deploy: $current -> $tag ($(cat "$D/releases/$tag/COMMIT" 2>/dev/null))"
+switch "$tag"
+if healthy; then
+  log "ok: $tag is live"
+else
+  log "FAILED: $tag did not pass health checks, rolling back to $current"
+  echo "$tag" >>"$S/bad"
+  if [[ -d $D/releases/$current ]]; then
+    switch "$current"
+    if healthy; then log "rolled back: $current is live"; else log "ROLLBACK ALSO UNHEALTHY: check by hand"; fi
+  fi
+  exit 1
+fi
+
+# Keep the three newest releases plus whatever is current.
+find "$D/releases" -mindepth 1 -maxdepth 1 -printf "%f\n" | sort -r | tail -n +4 | while read -r old; do
+  [[ $old == "$tag" ]] || rm -rf "${D:?}/releases/$old"
+done

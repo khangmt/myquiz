@@ -1,0 +1,10 @@
+[Unit]
+Description=myquiz: pull and switch to the newest release
+
+[Service]
+Type=oneshot
+Slice=myquiz.slice
+Nice=15
+CPUQuota=50%
+MemoryMax=256M
+ExecStart=/local/khangmt/myquiz/bin/myquiz-deploy

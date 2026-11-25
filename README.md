@@ -44,6 +44,9 @@ Tests: `cargo test --workspace` (database tests run when `DATABASE_URL` and `RED
 
 ## Running the whole stack
 
+The live site (https://myquiz.dev) runs without Docker on the faculty server and updates itself
+from GitHub releases after CI passes on `main`; see [infra/selfhost/README.md](infra/selfhost/README.md).
+
 ```sh
 cd infra
 cp .env.example .env   # set POSTGRES_PASSWORD and REDIS_PASSWORD

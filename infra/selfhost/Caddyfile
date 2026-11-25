@@ -1,0 +1,62 @@
+# myquiz on cnpm-01: only cloudflared (same host) talks to this port.
+{
+	admin off
+	auto_https off
+	storage file_system /local/khangmt/myquiz/data/caddy
+}
+
+http://:8080 {
+	bind 127.0.0.1
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+	}
+
+	@internal path /healthz /metrics
+	handle @internal {
+		respond 404
+	}
+
+	handle /api/* {
+		request_body {
+			max_size 26MB
+		}
+		reverse_proxy 127.0.0.1:18081 {
+			# The app reads the last X-Forwarded-For hop; behind the tunnel
+			# that would be 127.0.0.1, so pass the visitor IP Cloudflare saw.
+			header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+		}
+	}
+
+	handle_path /media/* {
+		root * /local/khangmt/myquiz/data/media
+		header Cache-Control "public, max-age=31536000, immutable"
+		header Content-Type "image/webp"
+		@hidden path /.*
+		respond @hidden 404
+		file_server
+	}
+
+	handle /ws {
+		reverse_proxy 127.0.0.1:18082 {
+			header_up X-Forwarded-For {http.request.header.Cf-Connecting-Ip}
+		}
+	}
+
+	handle {
+		# no-transform: Cloudflare then leaves the HTML alone (no injected
+		# analytics beacon, which the CSP would block anyway).
+		header Cache-Control "no-transform"
+		root * /local/khangmt/myquiz/current/web
+		try_files {path} /index.html
+		file_server
+	}
+}

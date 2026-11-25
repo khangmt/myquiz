@@ -1,0 +1,80 @@
+name: Release
+
+# Continuous delivery for the self-hosted server (infra/selfhost). The server
+# sits behind the UIT VPN, so GitHub cannot push to it; instead, every green
+# CI run on main publishes a release here, and a timer on the server
+# (myquiz-deploy) pulls the newest one, checks it and switches over.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Only after CI passed on a push to main (or by hand).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      # Built in Debian bookworm so the binary needs only glibc 2.36, older
+      # than the server's Ubuntu 24.04.
+      - name: Server binary
+        run: |
+          docker run --rm -v "$PWD":/src -w /src rust:1-bookworm \
+            cargo build --release --locked -p myquiz
+          sudo chown -R "$(id -u)" target
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Web app
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Package
+        run: |
+          short="${SHA::7}"
+          tag="deploy-$(date -u +%Y%m%d-%H%M%S)-$short"
+          mkdir -p "pkg/$tag"
+          cp target/release/myquiz "pkg/$tag/myquiz"
+          cp -r web/dist "pkg/$tag/web"
+          printf '%s\n' "$SHA" > "pkg/$tag/COMMIT"
+          tar -C pkg -czf "myquiz-$tag.tar.gz" "$tag"
+          sha256sum "myquiz-$tag.tar.gz" > SHA256SUMS
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" "myquiz-$TAG.tar.gz" SHA256SUMS \
+            --target "$SHA" --latest \
+            --title "$TAG" \
+            --notes "Built from $SHA after CI passed. Picked up by myquiz-deploy on the server."
+          # Keep the 10 newest deploy releases.
+          gh release list --limit 100 --json tagName --jq '.[].tagName' \
+            | grep '^deploy-' | sort -r | tail -n +11 \
+            | xargs -r -I{} gh release delete {} --yes --cleanup-tag
