@@ -240,7 +240,11 @@
       "DISCONNECTED": "Mất kết nối, hãy thử lại.",
       "TIMEOUT": "Máy chủ không phản hồi, hãy thử lại."
     },
-    "qr": "Mã QR để vào trò chơi"
+    "qr": "Mã QR để vào trò chơi",
+    "cancel": "Huỷ",
+    "waitForOthers": "Đang chờ những người chơi khác…",
+    "waitingForPlayers": "Đang chờ người chơi vào phòng…",
+    "lockedBadge": "Phòng đã khoá"
   },
   "reports": {
     "title": "Báo cáo trò chơi",

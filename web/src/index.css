@@ -1,1 +1,66 @@
 @import "tailwindcss";
+
+@theme {
+  --animate-pop: pop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+  --animate-rise: rise 0.45s ease-out both;
+  --animate-grow: grow 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes grow {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+}
+
+/* The live game runs on its own full-screen stage, apart from the admin
+   pages: dark, so it reads well on a projector and saves phone batteries. */
+.game-stage {
+  background-color: #0d1030;
+  background-image:
+    radial-gradient(60rem 40rem at 15% -10%, rgb(99 102 241 / 0.28), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 110%, rgb(14 165 233 / 0.16), transparent 60%);
+  transition: background-color 0.3s ease;
+}
+.game-stage[data-tone="correct"] {
+  background-color: #047857;
+  background-image: radial-gradient(50rem 36rem at 50% 0%, rgb(255 255 255 / 0.14), transparent 65%);
+}
+.game-stage[data-tone="wrong"] {
+  background-color: #be123c;
+  background-image: radial-gradient(50rem 36rem at 50% 0%, rgb(255 255 255 / 0.12), transparent 65%);
+}
+.game-stage[data-tone="missed"] {
+  background-color: #334155;
+  background-image: radial-gradient(50rem 36rem at 50% 0%, rgb(255 255 255 / 0.1), transparent 65%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-stage *,
+  .game-stage {
+    animation: none !important;
+    transition: none !important;
+  }
+}
