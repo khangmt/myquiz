@@ -206,3 +206,41 @@ test("a player who reloads on the leaderboard or during the reveal sees it again
   });
   expect(await screen.findByText("Chính xác!")).toBeTruthy();
 });
+
+test("a player picks an avatar in the game's style and joins with it", async () => {
+  mockFetch((url) => (url.endsWith("/games/pin/123456") ? { status: 200, body: { pin: "123456", title: "Địa lý", locked: false, theme: "anime" } } : undefined));
+  const { container } = renderApp("/join?pin=123456");
+  fireEvent.change(await screen.findByLabelText("Biệt danh"), { target: { value: "Lan" } });
+  expect(container.querySelector('.game-stage[data-theme="anime"]')).toBeTruthy();
+  fireEvent.click(screen.getByLabelText("froggy"));
+  fireEvent.click(screen.getByText("Vào chơi"));
+
+  const ws = await socket();
+  expect(ws.sent.find((m) => m.t === "player:join")!.d).toMatchObject({ nickname: "Lan", avatar: "froggy" });
+  expect(localStorage.getItem("myquiz.avatar")).toBe("froggy");
+  ws.ack("player:join", { playerId: "p1", token: "t", snapshot: { ...lobby, theme: "anime", me: { playerId: "p1", nickname: "Lan", avatar: "froggy", score: 0, rank: 1, answered: false } } });
+  expect(await screen.findByText("Bạn đã vào phòng!")).toBeTruthy();
+  ws.push("game:theme", { theme: "cute" });
+  await waitFor(() => expect(container.querySelector('.game-stage[data-theme="cute"]')).toBeTruthy());
+});
+
+test("the host picks the style in the lobby", async () => {
+  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : undefined));
+  const { container } = renderApp("/host/123456");
+  const ws = await socket();
+  ws.ack("host:attach", { ...lobby, theme: "cute", reportId: "s-42", players: [{ id: "p1", nickname: "Lan", avatar: "kitty" }] });
+  fireEvent.click(await screen.findByRole("radio", { name: /Anime/ }));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "host:theme", d: { theme: "anime" } });
+  ws.ack("host:theme", {});
+  ws.push("game:theme", { theme: "anime" });
+  await waitFor(() => expect(screen.getByRole("radio", { name: /Anime/ }).getAttribute("aria-checked")).toBe("true"));
+  expect(container.querySelector('.game-stage[data-theme="anime"]')).toBeTruthy();
+});
+
+test("the avatar ids match the server's list", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { AVATAR_IDS } = await import("./avatars");
+  const rust = readFileSync("../crates/protocol/src/ws.rs", "utf8");
+  const list = rust.match(/pub const AVATARS: &\[&str\] = &\[([^\]]*)\]/)![1];
+  expect([...list.matchAll(/"([a-z]+)"/g)].map((m) => m[1])).toEqual(AVATAR_IDS);
+});

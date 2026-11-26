@@ -11,10 +11,12 @@ import type { ScoreRow } from "../generated/ScoreRow";
 import type { ServerPush } from "../generated/ServerPush";
 import { LanguageSelect } from "../components/LanguageSelect";
 import { AckError, GameSocket, type SocketStatus } from "./socket";
-import { Badge, Big, btn, Chip, Countdown, Logo, Muted, Notice, optionStyle, panel, Podium, Scores, Shape, Stage, timeFraction, Waiting, type Tone } from "./ui";
+import { Badge, Big, btn, Chip, Countdown, Logo, Muted, Notice, optionStyle, outline, panel, Podium, Scores, Shape, Stage, timeFraction, Waiting, type Tone } from "./ui";
+import { asTheme, Avatar, AvatarPicker, randomAvatar, ThemeContext, type Theme } from "./avatars";
 import { secondsLeft, useTicker } from "./useCountdown";
 
 const DEVICE_KEY = "myquiz.device";
+const AVATAR_KEY = "myquiz.avatar";
 const tokenKey = (pin: string) => `myquiz.player.${pin}`;
 
 function storage(): Storage | null {
@@ -52,6 +54,7 @@ export function Play() {
   );
   const [error, setError] = useState<string | null>(null);
   const [nickname, setNickname] = useState("");
+  const [avatar, setAvatar] = useState(() => storage()?.getItem(AVATAR_KEY) ?? randomAvatar());
   const [pinInput, setPinInput] = useState(pin);
 
   useEffect(() => {
@@ -80,6 +83,7 @@ export function Play() {
       <Game
         pin={pin}
         nickname={nickname}
+        avatar={avatar}
         onLeave={(code) => {
           storage()?.removeItem(tokenKey(pin));
           setError(code);
@@ -89,11 +93,12 @@ export function Play() {
     );
   }
 
-  const input = "w-full rounded-xl border-0 bg-white px-3 py-4 text-center text-2xl font-bold text-slate-900 placeholder:font-medium placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-400";
+  const input = "w-full rounded-xl border-[3px] border-ink bg-white px-3 py-4 text-center text-2xl font-bold text-ink placeholder:font-medium placeholder:text-ink/40 focus:outline-none focus:ring-4 focus:ring-lagoon";
   const form = `${panel} flex w-full max-w-sm animate-rise flex-col gap-4 p-6`;
   return (
     <Stage
       narrow
+      theme={stage.kind === "nickname" ? asTheme(stage.game.theme) : undefined}
       left={
         <Link to="/" aria-label={t("app.name")}>
           <Logo />
@@ -136,6 +141,7 @@ export function Play() {
           onSubmit={(e) => {
             e.preventDefault();
             if (!nickname.trim()) return;
+            storage()?.setItem(AVATAR_KEY, avatar);
             setError(null);
             setStage({ kind: "playing" });
           }}
@@ -150,6 +156,7 @@ export function Play() {
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
           />
+          <AvatarPicker value={avatar} onChange={setAvatar} label={t("game.pickAvatar")} theme={asTheme(stage.game.theme)} />
           <button className={btn.primary} type="submit" disabled={!nickname.trim()}>
             {t("game.enter")}
           </button>
@@ -173,10 +180,11 @@ type View =
 /** Leave codes send the player back to the PIN or nickname screen. */
 const FATAL = new Set(["PIN_INVALID", "LOCKED", "KICKED", "FULL", "NICK_TAKEN", "NICK_INVALID", "TOKEN_INVALID", "ALREADY_JOINED"]);
 
-function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLeave: (code: string) => void }) {
+function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: string; avatar: string; onLeave: (code: string) => void }) {
   const { t } = useTranslation();
   const [view, setView] = useState<View>({ kind: "connecting" });
-  const [me, setMe] = useState<{ nickname: string; score: number; rank: number } | null>(null);
+  const [me, setMe] = useState<{ nickname: string; avatar: string; score: number; rank: number } | null>(null);
+  const [theme, setTheme] = useState<Theme>("cute");
   const [status, setStatus] = useState<SocketStatus>("connecting");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const socket = useRef<GameSocket | null>(null);
@@ -186,7 +194,8 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
   leave.current = onLeave;
 
   const fromSnapshot = useCallback((s: GameSnapshot) => {
-    if (s.me) setMe({ nickname: s.me.nickname, score: s.me.score, rank: s.me.rank });
+    if (s.me) setMe({ nickname: s.me.nickname, avatar: s.me.avatar, score: s.me.score, rank: s.me.rank });
+    setTheme(asTheme(s.theme));
     if (s.question) lastQuestion.current = s.question;
     switch (s.state.state) {
       case "lobby":
@@ -225,6 +234,8 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
         storage()?.removeItem(tokenKey(pin));
         socket.current?.close();
         return setView({ kind: "ended", reason: p.d.reason });
+      case "game:theme":
+        return setTheme(asTheme(p.d.theme));
       case "player:kicked":
         storage()?.removeItem(tokenKey(pin));
         socket.current?.close();
@@ -242,7 +253,7 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
         const token = storage()?.getItem(tokenKey(pin));
         const attempt = token
           ? s.request<GameSnapshot>({ t: "player:resume", d: { pin, token } })
-          : s.request<PlayerJoined>({ t: "player:join", d: { pin, nickname: nickname.trim(), deviceId: deviceId() } }).then((j) => {
+          : s.request<PlayerJoined>({ t: "player:join", d: { pin, nickname: nickname.trim(), deviceId: deviceId(), avatar } }).then((j) => {
               storage()?.setItem(tokenKey(pin), j.token);
               return j.snapshot;
             });
@@ -292,15 +303,15 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
       : "";
 
   return (
+    <ThemeContext.Provider value={theme}>
     <Stage
       narrow
       tone={tone}
+      theme={theme}
       left={
         me && !over ? (
           <span className="flex min-w-0 items-center gap-2 font-semibold">
-            <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-bold uppercase">
-              {[...me.nickname][0]}
-            </span>
+            <Avatar id={me.avatar} size={36} />
             <span className="truncate">{me.nickname}</span>
           </span>
         ) : undefined
@@ -313,7 +324,7 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
       {view.kind === "connecting" && <Muted>{t("common.loading")}</Muted>}
       {view.kind === "lobby" && (
         <>
-          <Badge>✓</Badge>
+          <span className="animate-pop">{me ? <Avatar id={me.avatar} size={120} /> : <Badge>✓</Badge>}</span>
           <Big>{t("game.youreIn")}</Big>
           <Muted>{t("game.waitForHost")}</Muted>
           <Waiting />
@@ -361,8 +372,8 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
           <Badge>{!view.r.answered ? "⏱" : view.r.correct ? "✓" : "✕"}</Badge>
           <Big>{!view.r.answered ? t("game.timeUp") : view.r.correct ? t("game.correct") : t("game.incorrect")}</Big>
           <p className="text-6xl font-black tabular-nums">+{view.r.points}</p>
-          <p className="rounded-full bg-black/20 px-4 py-2 font-semibold">{t("game.rankIs", { rank: view.r.rank })}</p>
-          {rightAnswer && <p className="text-lg text-white/90">{t("game.acceptedAnswers", { answers: rightAnswer })}</p>}
+          <p className="rounded-full border-2 border-ink bg-white px-4 py-2 font-bold">{t("game.rankIs", { rank: view.r.rank })}</p>
+          {rightAnswer && <p className="text-lg text-ink/90">{t("game.acceptedAnswers", { answers: rightAnswer })}</p>}
         </>
       )}
 
@@ -370,20 +381,20 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
         <>
           <Big>{t("game.leaderboard")}</Big>
           <Scores top={view.top} me={me?.nickname} />
-          {me && <p className="rounded-full bg-white/10 px-4 py-2 font-semibold">{t("game.rankIs", { rank: me.rank })}</p>}
+          {me && <p className="rounded-full border-2 border-ink bg-white px-4 py-2 font-bold">{t("game.rankIs", { rank: me.rank })}</p>}
         </>
       )}
       {view.kind === "podium" && (
         <>
           <Big>{t("game.podium")}</Big>
           <Podium top={view.top} me={me?.nickname} />
-          {me && <p className="rounded-full bg-white/10 px-4 py-2 font-semibold">{t("game.finalRank", { rank: me.rank, count: me.score })}</p>}
+          {me && <p className="rounded-full border-2 border-ink bg-white px-4 py-2 font-bold">{t("game.finalRank", { rank: me.rank, count: me.score })}</p>}
         </>
       )}
       {view.kind === "ended" && (
         <>
           <Big>{t(`game.ended.${view.reason}`, { defaultValue: t("game.ended.finished") })}</Big>
-          {me && <p className="rounded-full bg-white/10 px-4 py-2 font-semibold">{t("game.finalRank", { rank: me.rank, count: me.score })}</p>}
+          {me && <p className="rounded-full border-2 border-ink bg-white px-4 py-2 font-bold">{t("game.finalRank", { rank: me.rank, count: me.score })}</p>}
           <Link to="/" className={btn.secondary}>
             {t("home.join")}
           </Link>
@@ -391,6 +402,7 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
       )}
       {view.kind === "kicked" && <Big>{t("game.errors.KICKED")}</Big>}
     </Stage>
+    </ThemeContext.Provider>
   );
 }
 
@@ -409,7 +421,7 @@ function AnswerPad({ q, onSubmit }: { q: QuestionStart; onSubmit: (ids: number[]
         }}
       >
         <input
-          className="w-full rounded-xl border-0 bg-white px-4 py-4 text-xl font-semibold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-400"
+          className="w-full rounded-xl border-[3px] border-ink bg-white px-4 py-4 text-xl font-semibold text-ink placeholder:font-normal placeholder:text-ink/40 focus:outline-none focus:ring-4 focus:ring-lagoon"
           autoFocus
           maxLength={100}
           aria-label={t("game.yourAnswer")}
@@ -436,8 +448,8 @@ function AnswerPad({ q, onSubmit }: { q: QuestionStart; onSubmit: (ids: number[]
               key={o.id}
               type="button"
               aria-pressed={multi ? on : undefined}
-              className={`relative flex min-h-24 flex-col items-center justify-center gap-3 rounded-2xl p-4 text-xl font-bold shadow-lg shadow-black/25 transition active:scale-[0.97] ${optionStyle(i).bg} ${
-                multi && on ? "ring-4 ring-white" : ""
+              className={`relative flex min-h-24 flex-col items-center justify-center gap-3 rounded-2xl p-4 text-xl font-extrabold transition active:translate-y-[3px] active:shadow-[0_1px_0_var(--color-ink)] ${outline} ${optionStyle(i).bg} ${
+                multi && on ? "ring-4 ring-sun ring-offset-2 ring-offset-paper" : ""
               }`}
               onClick={() => {
                 if (!multi) return onSubmit([o.id], null);
@@ -447,7 +459,7 @@ function AnswerPad({ q, onSubmit }: { q: QuestionStart; onSubmit: (ids: number[]
               <Shape i={i} large />
               <span className="max-w-full break-words">{o.text}</span>
               {multi && on && (
-                <span aria-hidden className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-white text-emerald-700">
+                <span aria-hidden className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border-2 border-ink bg-white text-leaf-deep">
                   ✓
                 </span>
               )}

@@ -126,5 +126,6 @@ pub async fn check_pin(
         pin,
         title,
         locked: meta.locked,
+        theme: meta.theme,
     }))
 }

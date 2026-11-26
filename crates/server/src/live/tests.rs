@@ -63,6 +63,7 @@ fn quiz() -> QuizSnapshot {
 fn player(nick: &str, device: &str) -> NewPlayer {
     NewPlayer {
         nickname: nick.into(),
+        avatar: "bunny".into(),
         device_id: device.into(),
         user_id: None,
         token_hash: secrets::hash_token(&secrets::new_player_token()),

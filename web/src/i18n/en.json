@@ -253,7 +253,26 @@
     "lockedBadge": "Locked",
     "nameLabel": "Game name (e.g. your class)",
     "namePlaceholder": "e.g. SE101.A, Tuesday",
-    "nameSaved": "Saved to the report"
+    "nameSaved": "Saved to the report",
+    "pickAvatar": "Pick your buddy",
+    "music": {
+      "label": "Music",
+      "off": "Off",
+      "mute": "Mute music",
+      "unmute": "Unmute music",
+      "volume": "Music volume",
+      "tracks": {
+        "beach": "Beach Bounce",
+        "garden": "Garden Stroll",
+        "thinking": "Thinking Time",
+        "river": "Lazy River"
+      }
+    },
+    "theme": {
+      "label": "Style",
+      "cute": "Cute",
+      "anime": "Anime"
+    }
   },
   "reports": {
     "title": "Game reports",

@@ -157,6 +157,8 @@ pub struct PinCheck {
     pub title: String,
     /// The host locked the lobby: new players cannot join.
     pub locked: bool,
+    /// The game's look (see `ws::THEMES`), so the avatar picker matches.
+    pub theme: String,
 }
 
 /// `GET /quizzes/expiring`: quizzes that will be deleted within 3 days,

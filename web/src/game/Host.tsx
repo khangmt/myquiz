@@ -13,7 +13,9 @@ import type { ScoreRow } from "../generated/ScoreRow";
 import type { ServerPush } from "../generated/ServerPush";
 import { AckError, GameSocket, type SocketStatus } from "./socket";
 import { JoinQr } from "./JoinQr";
-import { Big, btn, Chip, Countdown, Muted, Notice, optionStyle, panel, Podium, Scores, Shape, Stage, timeFraction, Waiting } from "./ui";
+import { Big, btn, Chip, Countdown, Muted, Notice, optionStyle, outline, panel, Podium, Scores, Shape, Stage, timeFraction, Waiting } from "./ui";
+import { asTheme, Avatar, THEMES, ThemeContext, type Theme } from "./avatars";
+import { MusicControl } from "./MusicControl";
 import { secondsLeft, useTicker } from "./useCountdown";
 import type { SessionReport } from "../generated/SessionReport";
 
@@ -57,7 +59,7 @@ function GameName({ reportId }: { reportId: string }) {
         void save();
       }}
     >
-      <label htmlFor="game-name" className="text-sm text-white/70">
+      <label htmlFor="game-name" className="text-sm text-ink/70">
         {t("game.nameLabel")}
       </label>
       <input
@@ -70,9 +72,9 @@ function GameName({ reportId }: { reportId: string }) {
           setState("idle");
         }}
         onBlur={() => void save()}
-        className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-white placeholder:text-white/40 focus:border-white/60 focus:outline-none"
+        className="rounded-lg border-2 border-ink bg-white px-3 py-2 text-ink placeholder:text-ink/40 focus:ring-4 focus:ring-lagoon/50 focus:outline-none"
       />
-      <span className="h-4 text-xs text-white/60" aria-live="polite">
+      <span className="h-4 text-xs text-ink/60" aria-live="polite">
         {state === "saving" ? t("editor.saving") : state === "saved" ? t("game.nameSaved") : state === "error" ? t("errors.INTERNAL") : ""}
       </span>
     </form>
@@ -105,12 +107,14 @@ export function Host() {
   const socket = useRef<GameSocket | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [theme, setTheme] = useState<Theme>("cute");
 
   const fromSnapshot = useCallback((s: GameSnapshot) => {
     state.current = s.state;
     if (s.reportId) setReportId(s.reportId);
     setPlayers(s.players);
     setLocked(s.locked);
+    setTheme(asTheme(s.theme));
     switch (s.state.state) {
       case "lobby":
         return setView({ kind: "lobby" });
@@ -162,6 +166,8 @@ export function Host() {
       case "game:ended":
         state.current = { state: "ended" };
         return setView({ kind: "ended", reason: p.d.reason });
+      case "game:theme":
+        return setTheme(asTheme(p.d.theme));
       default:
         return;
     }
@@ -215,20 +221,26 @@ export function Host() {
   );
 
   return (
+    <ThemeContext.Provider value={theme}>
     <Stage
+      theme={theme}
       center={current && t("game.questionOf", { n: current.index + 1, total: current.total })}
       right={
-        live &&
-          view.kind !== "lobby" && (
+        live && (
             <>
+              <MusicControl />
+              {view.kind !== "lobby" && (
+                <>
               <Chip>
-                <span className="text-white/60">PIN</span>
+                <span className="text-ink/60">PIN</span>
                 <span className="tracking-wider">{pin}</span>
               </Chip>
               <Chip>
                 <PersonIcon />
                 {players.length}
               </Chip>
+                </>
+              )}
             </>
           )
       }
@@ -237,7 +249,7 @@ export function Host() {
           <>
             {confirmEnd ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-white/80">{t("game.confirmEnd")}</span>
+                <span className="text-sm text-ink/80">{t("game.confirmEnd")}</span>
                 <button
                   type="button"
                   className={btn.danger}
@@ -263,6 +275,7 @@ export function Host() {
             <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
               {view.kind === "lobby" && (
                 <>
+                  <ThemePicker value={theme} disabled={busy} onChange={(th) => act({ t: "host:theme", d: { theme: th } })} />
                   <button type="button" className={btn.secondary} aria-pressed={locked} onClick={() => act({ t: "host:lock", d: { locked: !locked } })}>
                     {locked ? t("game.unlock") : t("game.lock")}
                   </button>
@@ -301,12 +314,12 @@ export function Host() {
       {view.kind === "lobby" && (
         <div className="grid w-full items-stretch gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
           <section className={`${panel} flex flex-col items-center justify-center gap-5 p-6 sm:p-8`}>
-            <p className="text-lg text-white/70">{t("game.joinAt", { url: `${joinBase.replace(/^https?:\/\//, "")}/join` })}</p>
-            <p className="font-mono text-6xl font-black tracking-[0.15em] sm:text-7xl xl:text-8xl" aria-label={t("game.pinIs", { pin })}>
+            <p className="text-lg text-ink/70">{t("game.joinAt", { url: `${joinBase.replace(/^https?:\/\//, "")}/join` })}</p>
+            <p className="font-mono text-6xl font-black tracking-[0.15em] text-sea sm:text-7xl xl:text-8xl" aria-label={t("game.pinIs", { pin })}>
               {pin}
             </p>
             <JoinQr url={joinUrl} label={t("game.qr")} />
-            <p className="break-all text-xs text-white/40">{joinUrl}</p>
+            <p className="break-all text-xs text-ink/40">{joinUrl}</p>
             {reportId && <GameName reportId={reportId} />}
           </section>
           <section className={`${panel} flex min-h-64 flex-col gap-4 p-6 sm:p-8`}>
@@ -325,12 +338,13 @@ export function Host() {
             ) : (
               <ul className="flex flex-wrap content-start gap-2">
                 {players.map((p) => (
-                  <li key={p.id} className="group flex animate-pop items-center rounded-full bg-white/10 py-1 pl-4 pr-1 text-lg font-semibold">
+                  <li key={p.id} className="group flex animate-pop items-center gap-2 rounded-full border-2 border-ink bg-white py-1 pl-1 pr-1 text-lg font-bold">
+                    <Avatar id={p.avatar} size={40} />
                     {p.nickname}
                     <button
                       type="button"
                       aria-label={t("game.kick", { name: p.nickname })}
-                      className="ml-1 flex h-7 w-7 items-center justify-center rounded-full text-sm text-white/40 transition hover:bg-rose-600 hover:text-white focus-visible:bg-rose-600 focus-visible:text-white"
+                      className="ml-1 flex h-7 w-7 items-center justify-center rounded-full text-sm text-ink/40 transition hover:bg-coral hover:text-white focus-visible:bg-coral focus-visible:text-white"
                       onClick={() => act({ t: "host:kick", d: { playerId: p.id } })}
                     >
                       ✕
@@ -356,8 +370,8 @@ export function Host() {
               <div className="flex justify-start">
                 <Countdown large seconds={secondsLeft(view.q.endsAt, now)} fraction={timeFraction(view.q, now)} />
               </div>
-              {view.q.media ? <img src={view.q.media} alt="" className="max-h-[38vh] min-w-0 rounded-2xl object-contain shadow-2xl shadow-black/40" /> : <span />}
-              <p className="justify-self-end rounded-2xl bg-white/10 px-4 py-3 text-xl font-bold tabular-nums sm:text-2xl" aria-live="polite">
+              {view.q.media ? <img src={view.q.media} alt="" className="max-h-[38vh] min-w-0 rounded-2xl object-contain border-[3px] border-ink bg-white" /> : <span />}
+              <p className="justify-self-end rounded-2xl border-[3px] border-ink bg-white px-4 py-3 text-xl font-black tabular-nums sm:text-2xl" aria-live="polite">
                 {t("game.answered", { answered: view.answered, connected: view.connected })}
               </p>
             </div>
@@ -402,6 +416,30 @@ export function Host() {
         </div>
       )}
     </Stage>
+    </ThemeContext.Provider>
+  );
+}
+
+/** Cute or anime: the look of the avatars and stage, picked in the lobby. */
+function ThemePicker({ value, disabled, onChange }: { value: Theme; disabled: boolean; onChange: (t: Theme) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div role="radiogroup" aria-label={t("game.theme.label")} className="flex items-center gap-1 rounded-2xl border-[3px] border-ink bg-white p-1 shadow-[0_3px_0_var(--color-ink)]">
+      {THEMES.map((th) => (
+        <button
+          key={th}
+          type="button"
+          role="radio"
+          aria-checked={value === th}
+          disabled={disabled}
+          onClick={() => value !== th && onChange(th)}
+          className={`flex items-center gap-1.5 rounded-xl py-1 pl-1 pr-3 text-sm font-bold transition ${value === th ? "bg-sand" : "hover:bg-mint"}`}
+        >
+          <Avatar id="bunny" theme={th} size={28} />
+          {t(`game.theme.${th}`)}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -436,23 +474,23 @@ function OptionGrid({ q, correct, counts, fill }: { q: QuestionStart; correct?: 
         return (
           <li
             key={o.id}
-            className={`flex flex-col justify-center gap-3 rounded-2xl p-4 text-left text-xl font-bold shadow-lg shadow-black/20 transition sm:p-5 sm:text-2xl ${optionStyle(i).bg} ${
-              correct ? (right ? "ring-4 ring-white" : "opacity-50 saturate-50") : ""
+            className={`flex flex-col justify-center gap-3 rounded-2xl p-4 text-left text-xl font-extrabold transition sm:p-5 sm:text-2xl ${outline} ${optionStyle(i).bg} ${
+              correct ? (right ? "ring-4 ring-sun ring-offset-2 ring-offset-paper" : "opacity-45 saturate-50") : ""
             }`}
           >
             <div className="flex items-center gap-3">
               <Shape i={i} />
               <span className="min-w-0 flex-1 break-words">{o.text}</span>
               {right && (
-                <span aria-hidden className="flex h-9 w-9 shrink-0 animate-pop items-center justify-center rounded-full bg-white text-xl text-emerald-700">
+                <span aria-hidden className="flex h-9 w-9 shrink-0 animate-pop items-center justify-center rounded-full border-2 border-ink bg-white text-xl text-leaf-deep">
                   ✓
                 </span>
               )}
               {counts && <span className="shrink-0 text-3xl font-black tabular-nums">{n}</span>}
             </div>
             {counts && (
-              <div aria-hidden className="h-2 w-full overflow-hidden rounded-full bg-black/25">
-                <div className="h-full origin-left rounded-full bg-white transition-[width] duration-700" style={{ width: `${(n / max) * 100}%` }} />
+              <div aria-hidden className="h-3 w-full overflow-hidden rounded-full border-2 border-current bg-white/30">
+                <div className="h-full origin-left rounded-full bg-current transition-[width] duration-700" style={{ width: `${(n / max) * 100}%` }} />
               </div>
             )}
           </li>
@@ -467,12 +505,12 @@ function RevealView({ q, reveal }: { q: QuestionStart | null; reveal: QuestionRe
   if (reveal.acceptedAnswers.length > 0 || q?.type === "fill_blank") {
     return (
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
-        <p className="animate-pop rounded-2xl bg-emerald-600 px-6 py-5 text-2xl font-bold ring-4 ring-white sm:text-3xl">
+        <p className={`animate-pop rounded-2xl bg-leaf-deep px-6 py-5 text-2xl font-extrabold text-white sm:text-3xl ${outline}`}>
           {t("game.acceptedAnswers", { answers: reveal.acceptedAnswers.join(", ") })}
         </p>
         <ul className="flex flex-col gap-2">
           {reveal.topTextAnswers.map((a) => (
-            <li key={a.text} className={`flex items-center gap-3 rounded-xl border px-4 py-2 text-lg ${a.correct ? "border-emerald-400/50 bg-emerald-500/20 font-semibold" : "border-white/10 bg-white/[0.07] text-white/70"}`}>
+            <li key={a.text} className={`flex items-center gap-3 rounded-xl border-2 px-4 py-2 text-lg ${a.correct ? "border-ink bg-mint font-bold" : "border-ink/20 bg-white/80 text-ink/70"}`}>
               <span aria-hidden className="w-5">
                 {a.correct ? "✓" : ""}
               </span>
