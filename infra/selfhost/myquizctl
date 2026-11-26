@@ -1,0 +1,38 @@
+#!/bin/bash
+# myquizctl start|stop|status|logs <unit>
+# Each piece is a user systemd service in myquiz.slice (total cap 1.7 GB RAM,
+# 1.8 CPUs, no GPU). Units: mq-postgres mq-redis mq-api mq-game mq-caddy mq-tunnel
+set -euo pipefail
+D=/local/khangmt/myquiz
+E=$D/env/bin
+UNITS="mq-postgres mq-redis mq-api mq-game mq-caddy mq-tunnel"
+run() { # name mem cpu cmd...
+  local n=$1 m=$2 c=$3; shift 3
+  systemctl --user is-active --quiet "$n" && { echo "$n already running"; return; }
+  systemctl --user reset-failed "$n" 2>/dev/null || true
+  systemd-run --user --quiet --unit="$n" --slice=myquiz.slice \
+    -p MemoryMax="$m" -p MemorySwapMax=0 -p CPUQuota="$c" -p Nice=10 \
+    -p Restart=always -p RestartSec=5 \
+    -p Environment=CUDA_VISIBLE_DEVICES= \
+    -p WorkingDirectory=$D "$@"
+  echo "started $n"
+}
+case "${1:-}" in
+start)
+  systemctl --user set-property myquiz.slice MemoryMax=1700M CPUQuota=180%
+  run mq-postgres 512M 40% $E/postgres -D $D/data/pg
+  for _ in $(seq 30); do $E/pg_isready -q -h 127.0.0.1 -p 15432 && break; sleep 1; done
+  run mq-redis 256M 20% $E/redis-server $D/redis.conf
+  sleep 1
+  run mq-api 256M 40% -p EnvironmentFile=$D/app.env -p Environment=BIND_ADDR=127.0.0.1:18081 $D/current/myquiz api
+  for _ in $(seq 30); do curl -fs -o /dev/null http://127.0.0.1:18081/healthz && break; sleep 1; done
+  run mq-game 384M 60% -p EnvironmentFile=$D/app.env -p Environment=BIND_ADDR=127.0.0.1:18082 -p LimitNOFILE=65536 $D/current/myquiz game
+  run mq-caddy 128M 20% $D/bin/caddy run --config $D/Caddyfile --adapter caddyfile
+  if [ -s $D/tunnel.token ]; then
+    run mq-tunnel 128M 20% /usr/bin/cloudflared --no-autoupdate tunnel run --token-file $D/tunnel.token
+  else echo "no tunnel.token yet: tunnel not started"; fi ;;
+stop) for u in $UNITS; do systemctl --user stop "$u" 2>/dev/null && echo "stopped $u" || true; done ;;
+status) systemctl --user list-units 'mq-*' --all --no-legend; systemctl --user show myquiz.slice -p MemoryCurrent -p MemoryMax -p CPUQuotaPerSecUSec ;;
+logs) journalctl --user -u "${2:?unit}" -n "${3:-50}" --no-pager ;;
+*) echo "usage: myquizctl start|stop|status|logs <unit> [n]"; exit 1 ;;
+esac
