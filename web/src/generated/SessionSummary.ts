@@ -3,7 +3,11 @@
 /**
  * One row of `GET /sessions?page=` (FR-RP-01).
  */
-export type SessionSummary = { id: string, quizTitle: string, 
+export type SessionSummary = { id: string, 
+/**
+ * The host's name for this game (e.g. the class), if any.
+ */
+name: string | null, quizTitle: string, 
 /**
  * RFC 3339.
  */

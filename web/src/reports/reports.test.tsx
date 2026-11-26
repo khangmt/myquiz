@@ -4,6 +4,7 @@ import { ME, mockFetch, renderApp } from "../test-utils";
 
 const SUMMARY = {
   id: "s1",
+  name: "SE101.A" as string | null,
   quizTitle: "Địa lý",
   startedAt: "2026-11-23T09:00:00Z",
   endedAt: "2026-11-23T09:10:00Z",
@@ -40,17 +41,42 @@ beforeEach(async () => {
   await i18n.changeLanguage("vi");
 });
 
-test("the reports list links to each game", async () => {
-  mockFetch((url) =>
+test("the reports list links each game by its name and searches", async () => {
+  const calls = mockFetch((url) =>
     url.endsWith("/me")
       ? { status: 200, body: ME }
       : url.includes("/sessions?page=1")
-        ? { status: 200, body: { items: [SUMMARY], page: 1, pageSize: 20, total: 1 } }
+        ? { status: 200, body: { items: [SUMMARY, { ...SUMMARY, id: "s2", name: null }], page: 1, pageSize: 20, total: 2 } }
         : undefined,
   );
   renderApp("/reports");
-  const link = await screen.findByText("Địa lý");
+  const link = await screen.findByText("SE101.A");
   expect(link.closest("a")!.getAttribute("href")).toBe("/reports/s1");
+  expect(screen.getByText("(chưa đặt tên)").closest("a")!.getAttribute("href")).toBe("/reports/s2");
+  expect(screen.getAllByText("Địa lý").length).toBe(2);
+
+  fireEvent.change(screen.getByLabelText("Tìm theo tên lượt chơi hoặc bộ câu hỏi"), { target: { value: "SE101 A" } });
+  await vi.waitFor(() => expect(calls.some((c) => c.url.endsWith("/sessions?page=1&q=SE101%20A"))).toBe(true));
+});
+
+test("a game can be renamed from its report", async () => {
+  const calls = mockFetch((url, init) =>
+    url.endsWith("/me")
+      ? { status: 200, body: ME }
+      : url.endsWith("/sessions/s1") && init?.method === "PATCH"
+        ? { status: 200, body: { ...SUMMARY, name: "SE101.B" } }
+        : url.endsWith("/sessions/s1")
+          ? { status: 200, body: REPORT }
+          : undefined,
+  );
+  renderApp("/reports/s1");
+  expect(await screen.findByRole("heading", { name: "SE101.A" })).toBeTruthy();
+  fireEvent.click(screen.getByText("Đổi tên"));
+  fireEvent.change(screen.getByLabelText("Tên lượt chơi"), { target: { value: " SE101.B " } });
+  fireEvent.click(screen.getByText("Lưu"));
+  await vi.waitFor(() => expect(calls.some((c) => c.init?.method === "PATCH")).toBe(true));
+  const patch = calls.find((c) => c.init?.method === "PATCH")!;
+  expect(JSON.parse(String(patch.init!.body))).toEqual({ name: "SE101.B" });
 });
 
 test("a report shows hard questions, player answers, and downloads Excel", async () => {

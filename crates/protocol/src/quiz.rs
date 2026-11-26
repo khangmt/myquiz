@@ -133,6 +133,10 @@ pub struct QuizInvalid {
 #[ts(export, export_to = "../../../web/src/generated/")]
 pub struct CreateGame {
     pub quiz_id: String,
+    /// Optional name for this game, e.g. the class ("SE101.A"). 1 to 80
+    /// characters; blank means no name.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

@@ -13,9 +13,11 @@ export function formatDate(iso: string, lang: string): string {
 export function Reports() {
   const { t, i18n } = useTranslation();
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const q = search.trim();
   const list = useQuery({
-    queryKey: ["sessions", page],
-    queryFn: () => api<SessionPage>(`/sessions?page=${page}`),
+    queryKey: ["sessions", page, q],
+    queryFn: () => api<SessionPage>(`/sessions?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
     placeholderData: keepPreviousData,
   });
   const data = list.data;
@@ -23,16 +25,30 @@ export function Reports() {
 
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-bold">{t("reports.title")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{t("reports.title")}</h1>
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          placeholder={t("reports.search")}
+          aria-label={t("reports.search")}
+          className="w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+        />
+      </div>
       {list.isLoading && <p className="text-slate-500">{t("common.loading")}</p>}
       {list.isError && <p role="alert" className="text-red-700">{t("errors.INTERNAL")}</p>}
-      {data && data.items.length === 0 && <p className="text-slate-600">{t("reports.empty")}</p>}
+      {data && data.items.length === 0 && <p className="text-slate-600">{q ? t("reports.noMatch") : t("reports.empty")}</p>}
       {data && data.items.length > 0 && (
         <div className="overflow-x-auto rounded-lg bg-white shadow">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 text-slate-600">
               <tr>
                 <th className="px-3 py-2">{t("reports.date")}</th>
+                <th className="px-3 py-2">{t("reports.name")}</th>
                 <th className="px-3 py-2">{t("reports.quiz")}</th>
                 <th className="px-3 py-2 text-right">{t("reports.players")}</th>
                 <th className="px-3 py-2 text-right">{t("reports.averageScore")}</th>
@@ -44,8 +60,11 @@ export function Reports() {
                   <td className="whitespace-nowrap px-3 py-2">{formatDate(s.startedAt, i18n.language)}</td>
                   <td className="px-3 py-2">
                     <Link to={`/reports/${s.id}`} className="font-medium text-indigo-700 underline">
-                      {s.quizTitle}
+                      {s.name ?? t("reports.unnamed")}
                     </Link>
+                  </td>
+                  <td className="px-3 py-2">
+                    {s.quizTitle}
                     {!s.ended && <span className="ml-2 text-xs text-amber-700">{t("reports.notFinished")}</span>}
                   </td>
                   <td className="px-3 py-2 text-right">{s.playerCount}</td>
