@@ -245,7 +245,11 @@
       "DISCONNECTED": "Disconnected, please try again.",
       "TIMEOUT": "The server didn't answer, please try again."
     },
-    "qr": "QR code to join the game"
+    "qr": "QR code to join the game",
+    "cancel": "Cancel",
+    "waitForOthers": "Waiting for the other players…",
+    "waitingForPlayers": "Waiting for players to join…",
+    "lockedBadge": "Lobby locked"
   },
   "reports": {
     "title": "Game reports",

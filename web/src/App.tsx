@@ -15,6 +15,16 @@ import { Admin } from "./admin/Admin";
 export default function App() {
   return (
     <Routes>
+      {/* The live game has its own full-screen stage, without the site header. */}
+      <Route path="join" element={<Play />} />
+      <Route
+        path="host/:pin"
+        element={
+          <RequireAuth>
+            <Host />
+          </RequireAuth>
+        }
+      />
       <Route element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="login" element={<Login />} />
@@ -47,15 +57,6 @@ export default function App() {
           element={
             <RequireAuth>
               <Report />
-            </RequireAuth>
-          }
-        />
-        <Route path="join" element={<Play />} />
-        <Route
-          path="host/:pin"
-          element={
-            <RequireAuth>
-              <Host />
             </RequireAuth>
           }
         />

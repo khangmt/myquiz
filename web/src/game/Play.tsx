@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { api, ApiFailure } from "../api/client";
 import type { GameSnapshot } from "../generated/GameSnapshot";
@@ -9,9 +9,9 @@ import type { QuestionResult } from "../generated/QuestionResult";
 import type { QuestionStart } from "../generated/QuestionStart";
 import type { ScoreRow } from "../generated/ScoreRow";
 import type { ServerPush } from "../generated/ServerPush";
-import { Scores } from "./Host";
+import { LanguageSelect } from "../components/LanguageSelect";
 import { AckError, GameSocket, type SocketStatus } from "./socket";
-import { Big, Countdown, optionStyle, Screen } from "./ui";
+import { Badge, Big, btn, Chip, Countdown, Logo, Muted, Notice, optionStyle, panel, Podium, Scores, Shape, Stage, timeFraction, Waiting, type Tone } from "./ui";
 import { secondsLeft, useTicker } from "./useCountdown";
 
 const DEVICE_KEY = "myquiz.device";
@@ -89,19 +89,23 @@ export function Play() {
     );
   }
 
-  const input = "w-full rounded-lg border border-slate-300 px-3 py-3 text-center text-2xl";
-  const button = "w-full rounded-lg bg-indigo-600 px-4 py-3 text-xl font-semibold text-white disabled:opacity-50";
+  const input = "w-full rounded-xl border-0 bg-white px-3 py-4 text-center text-2xl font-bold text-slate-900 placeholder:font-medium placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-400";
+  const form = `${panel} flex w-full max-w-sm animate-rise flex-col gap-4 p-6`;
   return (
-    <Screen>
-      {error && (
-        <p role="alert" className="rounded bg-red-50 px-3 py-2 text-red-800">
-          {t(`game.errors.${error}`, { defaultValue: t("errors.INTERNAL") })}
-        </p>
-      )}
-      {stage.kind === "checking" && <p className="text-slate-500">{t("common.loading")}</p>}
+    <Stage
+      narrow
+      left={
+        <Link to="/" aria-label={t("app.name")}>
+          <Logo />
+        </Link>
+      }
+      right={<LanguageSelect />}
+    >
+      {error && <Notice kind="error">{t(`game.errors.${error}`, { defaultValue: t("errors.INTERNAL") })}</Notice>}
+      {stage.kind === "checking" && <Muted>{t("common.loading")}</Muted>}
       {stage.kind === "pin" && (
         <form
-          className="flex w-full max-w-xs flex-col gap-3"
+          className={form}
           onSubmit={(e) => {
             e.preventDefault();
             if (pinInput.length !== 6) return;
@@ -111,23 +115,24 @@ export function Play() {
           }}
         >
           <input
-            className={`${input} tracking-widest`}
+            className={`${input} ${pinInput ? "tracking-[0.3em]" : ""}`}
             inputMode="numeric"
             autoComplete="off"
+            autoFocus
             maxLength={6}
             aria-label={t("home.pinPlaceholder")}
             placeholder={t("home.pinPlaceholder")}
             value={pinInput}
             onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ""))}
           />
-          <button className={button} type="submit" disabled={pinInput.length !== 6}>
+          <button className={btn.primary} type="submit" disabled={pinInput.length !== 6}>
             {t("home.join")}
           </button>
         </form>
       )}
       {stage.kind === "nickname" && (
         <form
-          className="flex w-full max-w-xs flex-col gap-3"
+          className={form}
           onSubmit={(e) => {
             e.preventDefault();
             if (!nickname.trim()) return;
@@ -135,7 +140,7 @@ export function Play() {
             setStage({ kind: "playing" });
           }}
         >
-          <p className="text-xl font-semibold">{stage.game.title}</p>
+          <p className="text-2xl font-extrabold text-balance">{stage.game.title}</p>
           <input
             className={input}
             autoFocus
@@ -145,12 +150,12 @@ export function Play() {
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
           />
-          <button className={button} type="submit" disabled={!nickname.trim()}>
+          <button className={btn.primary} type="submit" disabled={!nickname.trim()}>
             {t("game.enter")}
           </button>
         </form>
       )}
-    </Screen>
+    </Stage>
   );
 }
 
@@ -175,11 +180,14 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
   const [status, setStatus] = useState<SocketStatus>("connecting");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const socket = useRef<GameSocket | null>(null);
+  // Kept past the question so the result can name the right answer.
+  const lastQuestion = useRef<QuestionStart | null>(null);
   const leave = useRef(onLeave);
   leave.current = onLeave;
 
   const fromSnapshot = useCallback((s: GameSnapshot) => {
     if (s.me) setMe({ nickname: s.me.nickname, score: s.me.score, rank: s.me.rank });
+    if (s.question) lastQuestion.current = s.question;
     switch (s.state.state) {
       case "lobby":
         return setView({ kind: "lobby" });
@@ -202,6 +210,7 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
     switch (p.t) {
       case "question:start":
         setSubmitError(null);
+        lastQuestion.current = p.d;
         return setView({ kind: "question", q: p.d, sent: false });
       case "question:result":
         setMe((m) => (m ? { ...m, score: p.d.total, rank: p.d.rank } : m));
@@ -271,84 +280,117 @@ function Game({ pin, nickname, onLeave }: { pin: string; nickname: string; onLea
     }
   }
 
-  return (
-    <Screen>
-      {status === "reconnecting" && (
-        <p role="status" className="rounded bg-amber-100 px-3 py-1 text-amber-900">
-          {t("game.reconnecting")}
-        </p>
-      )}
-      {me && view.kind !== "ended" && view.kind !== "kicked" && (
-        <p className="text-sm text-slate-600">
-          {me.nickname} · {t("game.points", { count: me.score })}
-        </p>
-      )}
-      {submitError && (
-        <p role="alert" className="rounded bg-red-50 px-3 py-1 text-red-800">
-          {t(`game.errors.${submitError}`, { defaultValue: t("errors.INTERNAL") })}
-        </p>
-      )}
+  const playing = view.kind === "question" && now >= view.q.startsAt && !view.sent && now < view.q.endsAt;
+  const tone: Tone | undefined = view.kind === "result" ? (view.r.correct ? "correct" : view.r.answered ? "wrong" : "missed") : undefined;
+  const over = view.kind === "ended" || view.kind === "kicked";
+  const rightAnswer =
+    view.kind === "result" && !view.r.correct
+      ? (lastQuestion.current?.options ?? [])
+          .filter((o) => view.r.correctOptionIds.includes(o.id))
+          .map((o) => o.text)
+          .join(", ")
+      : "";
 
-      {view.kind === "connecting" && <p className="text-slate-500">{t("common.loading")}</p>}
+  return (
+    <Stage
+      narrow
+      tone={tone}
+      left={
+        me && !over ? (
+          <span className="flex min-w-0 items-center gap-2 font-semibold">
+            <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-bold uppercase">
+              {[...me.nickname][0]}
+            </span>
+            <span className="truncate">{me.nickname}</span>
+          </span>
+        ) : undefined
+      }
+      right={me && !over && <Chip>{t("game.points", { count: me.score })}</Chip>}
+    >
+      {status === "reconnecting" && <Notice kind="warn">{t("game.reconnecting")}</Notice>}
+      {submitError && <Notice kind="error">{t(`game.errors.${submitError}`, { defaultValue: t("errors.INTERNAL") })}</Notice>}
+
+      {view.kind === "connecting" && <Muted>{t("common.loading")}</Muted>}
       {view.kind === "lobby" && (
         <>
+          <Badge>✓</Badge>
           <Big>{t("game.youreIn")}</Big>
-          <p className="text-slate-600">{t("game.waitForHost")}</p>
+          <Muted>{t("game.waitForHost")}</Muted>
+          <Waiting />
         </>
       )}
-      {view.kind === "waiting" && <p className="text-xl text-slate-600">{t("game.waitForNext")}</p>}
+      {view.kind === "waiting" && (
+        <>
+          <Muted>{t("game.waitForNext")}</Muted>
+          <Waiting />
+        </>
+      )}
 
       {view.kind === "question" &&
         (now < view.q.startsAt ? (
           <>
-            <p className="text-slate-600">{t("game.questionOf", { n: view.q.index + 1, total: view.q.total })}</p>
+            <Chip>{t("game.questionOf", { n: view.q.index + 1, total: view.q.total })}</Chip>
             <Big>{view.q.text}</Big>
-            <p className="text-2xl">{t("game.getReady", { s: secondsLeft(view.q.startsAt, now) })}</p>
+            <Muted>{t("game.getReady", { s: secondsLeft(view.q.startsAt, now) })}</Muted>
           </>
         ) : view.sent ? (
-          <Big>{t("game.answerSent")}</Big>
-        ) : now >= view.q.endsAt ? (
-          <Big>{t("game.timeUp")}</Big>
-        ) : (
           <>
-            <div className="flex w-full items-center justify-between gap-3">
-              <Countdown seconds={secondsLeft(view.q.endsAt, now)} />
-              <p className="text-lg font-semibold">{view.q.text}</p>
-            </div>
-            <AnswerPad q={view.q} onSubmit={(ids, text) => submit(view.q, ids, text)} />
+            <Badge>✓</Badge>
+            <Big>{t("game.answerSent")}</Big>
+            <Muted>{t("game.waitForOthers")}</Muted>
+            <Waiting />
           </>
-        ))}
+        ) : now >= view.q.endsAt ? (
+          <>
+            <Badge>⏱</Badge>
+            <Big>{t("game.timeUp")}</Big>
+          </>
+        ) : null)}
+      {playing && view.kind === "question" && (
+        <div className="flex w-full flex-1 flex-col gap-4 self-stretch">
+          <div className={`${panel} flex items-center gap-4 p-3 text-left`}>
+            <Countdown seconds={secondsLeft(view.q.endsAt, now)} fraction={timeFraction(view.q, now)} />
+            <p className="min-w-0 flex-1 text-lg font-bold leading-snug">{view.q.text}</p>
+          </div>
+          <AnswerPad q={view.q} onSubmit={(ids, text) => submit(view.q, ids, text)} />
+        </div>
+      )}
 
       {view.kind === "result" && (
-        <div className={`flex w-full flex-col gap-2 rounded-xl p-6 text-white ${view.r.correct ? "bg-green-600" : view.r.answered ? "bg-red-600" : "bg-slate-600"}`}>
+        <>
+          <Badge>{!view.r.answered ? "⏱" : view.r.correct ? "✓" : "✕"}</Badge>
           <Big>{!view.r.answered ? t("game.timeUp") : view.r.correct ? t("game.correct") : t("game.incorrect")}</Big>
-          <p className="text-2xl">+{view.r.points}</p>
-          <p>{t("game.rankIs", { rank: view.r.rank })}</p>
-        </div>
+          <p className="text-6xl font-black tabular-nums">+{view.r.points}</p>
+          <p className="rounded-full bg-black/20 px-4 py-2 font-semibold">{t("game.rankIs", { rank: view.r.rank })}</p>
+          {rightAnswer && <p className="text-lg text-white/90">{t("game.acceptedAnswers", { answers: rightAnswer })}</p>}
+        </>
       )}
 
       {view.kind === "leaderboard" && (
         <>
           <Big>{t("game.leaderboard")}</Big>
-          <Scores top={view.top} />
-          {me && <p>{t("game.rankIs", { rank: me.rank })}</p>}
+          <Scores top={view.top} me={me?.nickname} />
+          {me && <p className="rounded-full bg-white/10 px-4 py-2 font-semibold">{t("game.rankIs", { rank: me.rank })}</p>}
         </>
       )}
       {view.kind === "podium" && (
         <>
           <Big>{t("game.podium")}</Big>
-          <Scores top={view.top} podium />
-          {me && <p>{t("game.finalRank", { rank: me.rank, count: me.score })}</p>}
+          <Podium top={view.top} me={me?.nickname} />
+          {me && <p className="rounded-full bg-white/10 px-4 py-2 font-semibold">{t("game.finalRank", { rank: me.rank, count: me.score })}</p>}
         </>
       )}
       {view.kind === "ended" && (
         <>
           <Big>{t(`game.ended.${view.reason}`, { defaultValue: t("game.ended.finished") })}</Big>
-          {me && <p>{t("game.finalRank", { rank: me.rank, count: me.score })}</p>}
+          {me && <p className="rounded-full bg-white/10 px-4 py-2 font-semibold">{t("game.finalRank", { rank: me.rank, count: me.score })}</p>}
+          <Link to="/" className={btn.secondary}>
+            {t("home.join")}
+          </Link>
         </>
       )}
       {view.kind === "kicked" && <Big>{t("game.errors.KICKED")}</Big>}
-    </Screen>
+    </Stage>
   );
 }
 
@@ -367,7 +409,7 @@ function AnswerPad({ q, onSubmit }: { q: QuestionStart; onSubmit: (ids: number[]
         }}
       >
         <input
-          className="w-full rounded-lg border border-slate-300 px-3 py-3 text-xl"
+          className="w-full rounded-xl border-0 bg-white px-4 py-4 text-xl font-semibold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-400"
           autoFocus
           maxLength={100}
           aria-label={t("game.yourAnswer")}
@@ -375,7 +417,7 @@ function AnswerPad({ q, onSubmit }: { q: QuestionStart; onSubmit: (ids: number[]
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <button type="submit" disabled={!text.trim()} className="rounded-lg bg-indigo-600 px-4 py-3 text-xl font-semibold text-white disabled:opacity-50">
+        <button type="submit" disabled={!text.trim()} className={btn.primary}>
           {t("game.submit")}
         </button>
       </form>
@@ -384,35 +426,37 @@ function AnswerPad({ q, onSubmit }: { q: QuestionStart; onSubmit: (ids: number[]
 
   const multi = q.type === "multi";
   return (
-    <div className="flex w-full flex-col gap-3">
-      <div className="grid w-full grid-cols-2 gap-3">
+    <div className="flex w-full flex-1 flex-col gap-3">
+      {/* The tiles fill the phone, so every answer is an easy thumb target. */}
+      <div className={`grid w-full flex-1 auto-rows-fr gap-3 ${q.options.length > 2 ? "grid-cols-2" : "grid-cols-1"}`}>
         {q.options.map((o, i) => {
-          const s = optionStyle(i);
           const on = picked.includes(o.id);
           return (
             <button
               key={o.id}
               type="button"
               aria-pressed={multi ? on : undefined}
-              className={`flex min-h-24 items-center gap-2 rounded-lg p-4 text-left text-lg font-semibold text-white ${s.bg} ${multi && on ? "ring-4 ring-slate-900" : ""}`}
+              className={`relative flex min-h-24 flex-col items-center justify-center gap-3 rounded-2xl p-4 text-xl font-bold shadow-lg shadow-black/25 transition active:scale-[0.97] ${optionStyle(i).bg} ${
+                multi && on ? "ring-4 ring-white" : ""
+              }`}
               onClick={() => {
                 if (!multi) return onSubmit([o.id], null);
                 setPicked((p) => (on ? p.filter((x) => x !== o.id) : [...p, o.id]));
               }}
             >
-              <span aria-hidden>{s.shape}</span>
-              {o.text}
+              <Shape i={i} large />
+              <span className="max-w-full break-words">{o.text}</span>
+              {multi && on && (
+                <span aria-hidden className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-white text-emerald-700">
+                  ✓
+                </span>
+              )}
             </button>
           );
         })}
       </div>
       {multi && (
-        <button
-          type="button"
-          disabled={picked.length === 0}
-          onClick={() => onSubmit(picked, null)}
-          className="rounded-lg bg-slate-900 px-4 py-3 text-xl font-semibold text-white disabled:opacity-50"
-        >
+        <button type="button" disabled={picked.length === 0} onClick={() => onSubmit(picked, null)} className={btn.primary}>
           {t("game.submit")}
         </button>
       )}
