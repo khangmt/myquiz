@@ -132,7 +132,12 @@ pub fn router(state: ApiState) -> Router {
         .route("/admin/users/{id}/reactivate", post(admin::reactivate))
         .route("/admin/audit", get(admin::audit_log))
         .route("/sessions", get(reports::list))
-        .route("/sessions/{id}", get(reports::get).delete(reports::delete))
+        .route(
+            "/sessions/{id}",
+            get(reports::get)
+                .patch(reports::rename)
+                .delete(reports::delete),
+        )
         .route("/sessions/{id}/exports", post(reports::export))
         .route("/quiz-template.zip", get(zip::template))
         // SEC-21: 1 MB for everything but uploads.

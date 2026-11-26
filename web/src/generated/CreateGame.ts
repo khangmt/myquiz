@@ -3,4 +3,9 @@
 /**
  * Body of `POST /games`.
  */
-export type CreateGame = { quizId: string, };
+export type CreateGame = { quizId: string, 
+/**
+ * Optional name for this game, e.g. the class ("SE101.A"). 1 to 80
+ * characters; blank means no name.
+ */
+name: string | null, };

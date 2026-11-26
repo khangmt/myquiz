@@ -21,8 +21,8 @@ use myquiz_engine::quiz::QuizSnapshot;
 use myquiz_engine::QuestionKind;
 use myquiz_protocol::quiz::ExportLink;
 use myquiz_protocol::report::{
-    PlayerAnswer, PlayerResult, QuestionStat, ReportExport, ReportFormat, SessionPage,
-    SessionReport, SessionSummary,
+    PlayerAnswer, PlayerResult, QuestionStat, RenameSession, ReportExport, ReportFormat,
+    SessionPage, SessionReport, SessionSummary,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -43,6 +43,26 @@ const HARD_BELOW: f64 = 0.35;
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
     page: Option<u32>,
+    /// Filters by game name or quiz title (case-insensitive substring).
+    q: Option<String>,
+}
+
+/// Longest game name, in characters.
+pub const NAME_MAX: usize = 80;
+
+/// Trims a game name; blank becomes None. Err when it is too long.
+pub fn clean_name(name: Option<&str>) -> Result<Option<String>, AppError> {
+    let Some(n) = name.map(str::trim).filter(|n| !n.is_empty()) else {
+        return Ok(None);
+    };
+    if n.chars().count() > NAME_MAX {
+        return Err(AppError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "NAME_LENGTH",
+            "the game name can be at most 80 characters",
+        ));
+    }
+    Ok(Some(n.to_string()))
 }
 
 fn parse_id(id: &str) -> ApiResult<Uuid> {
@@ -70,9 +90,22 @@ pub async fn list(
     Query(query): Query<ListQuery>,
 ) -> ApiResult<Json<SessionPage>> {
     let page = query.page.unwrap_or(1).clamp(1, 10_000);
+    let search = query
+        .q
+        .as_deref()
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+        .map(|q| {
+            let escaped = q
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_");
+            format!("%{escaped}%")
+        });
     #[allow(clippy::type_complexity)]
     let rows: Vec<(
         Uuid,
+        Option<String>,
         String,
         OffsetDateTime,
         Option<OffsetDateTime>,
@@ -81,7 +114,7 @@ pub async fn list(
         f64,
         i64,
     )> = sqlx::query_as(
-        "SELECT s.id, s.quiz_snapshot->>'title', s.started_at, s.ended_at, s.status = 'ended', \
+        "SELECT s.id, s.name, s.quiz_snapshot->>'title', s.started_at, s.ended_at, s.status = 'ended', \
                 (SELECT count(*) FROM session_players p WHERE p.session_id = s.id AND NOT p.kicked), \
                 (SELECT COALESCE(avg(COALESCE(p.final_score, \
                      (SELECT COALESCE(sum(a.points), 0) FROM answers a WHERE a.player_id = p.id))), 0)::float8 \
@@ -89,22 +122,26 @@ pub async fn list(
                 count(*) OVER () \
          FROM game_sessions s \
          WHERE s.host_id = $1 AND s.started_at IS NOT NULL \
+           AND ($4::text IS NULL OR s.name ILIKE $4 OR s.quiz_snapshot->>'title' ILIKE $4) \
          ORDER BY s.started_at DESC, s.id \
          LIMIT $2 OFFSET $3",
     )
     .bind(user.id)
     .bind(PAGE_SIZE as i64)
     .bind(((page - 1) * PAGE_SIZE) as i64)
+    .bind(&search)
     .fetch_all(&state.app.db)
     .await?;
     let total =
         match rows.first() {
-            Some(r) => r.7,
+            Some(r) => r.8,
             None if page == 1 => 0,
             None => sqlx::query_scalar(
-                "SELECT count(*) FROM game_sessions WHERE host_id = $1 AND started_at IS NOT NULL",
+                "SELECT count(*) FROM game_sessions s WHERE s.host_id = $1 AND s.started_at IS NOT NULL \
+                   AND ($2::text IS NULL OR s.name ILIKE $2 OR s.quiz_snapshot->>'title' ILIKE $2)",
             )
             .bind(user.id)
+            .bind(&search)
             .fetch_one(&state.app.db)
             .await?,
         };
@@ -113,12 +150,13 @@ pub async fn list(
             .into_iter()
             .map(|r| SessionSummary {
                 id: r.0.to_string(),
-                quiz_title: r.1,
-                started_at: rfc3339(r.2),
-                ended_at: r.3.map(rfc3339),
-                ended: r.4,
-                player_count: r.5 as u32,
-                average_score: round1(r.6),
+                name: r.1,
+                quiz_title: r.2,
+                started_at: rfc3339(r.3),
+                ended_at: r.4.map(rfc3339),
+                ended: r.5,
+                player_count: r.6 as u32,
+                average_score: round1(r.7),
             })
             .collect(),
         page,
@@ -136,6 +174,30 @@ pub async fn get(
     let id = parse_id(&id)?;
     check_access(&state.app.db, &user, id).await?;
     Ok(Json(build(&state.app.db, id).await?.0))
+}
+
+/// `PATCH /sessions/:id { name }`: the host names or renames a game, from
+/// the lobby or later from its report. Blank clears the name.
+pub async fn rename(
+    State(state): State<ApiState>,
+    user: AuthUser,
+    Path(id): Path<String>,
+    Json(body): Json<RenameSession>,
+) -> ApiResult<Json<SessionSummary>> {
+    let id = parse_id(&id)?;
+    let name = clean_name(body.name.as_deref())?;
+    let done = sqlx::query(
+        "UPDATE game_sessions SET name = $3 WHERE id = $1 AND host_id = $2 RETURNING id",
+    )
+    .bind(id)
+    .bind(user.id)
+    .bind(&name)
+    .fetch_optional(&state.app.db)
+    .await?;
+    if done.is_none() {
+        return Err(AppError::not_found("SESSION_NOT_FOUND"));
+    }
+    Ok(Json(build(&state.app.db, id).await?.0.session))
 }
 
 /// `DELETE /sessions/:id` (FR-RP-09): the host removes a report for good.
@@ -288,14 +350,19 @@ fn ratio(n: u32, d: u32) -> f64 {
 /// header.
 fn file_stem(s: &SessionSummary) -> String {
     let mut slug = String::new();
-    for c in myquiz_engine::matching::normalize(&s.quiz_title, true).chars() {
+    let label = match &s.name {
+        Some(n) => format!("{n} {}", s.quiz_title),
+        None => s.quiz_title.clone(),
+    };
+    for c in myquiz_engine::matching::normalize(&label, true).chars() {
         if c.is_ascii_alphanumeric() {
             slug.push(c.to_ascii_lowercase());
         } else if !slug.ends_with('-') {
             slug.push('-');
         }
     }
-    let slug: String = slug.trim_matches('-').chars().take(40).collect();
+    let slug: String = slug.trim_matches('-').chars().take(60).collect();
+    let slug = slug.trim_end_matches('-').to_string();
     let date: String = s
         .started_at
         .chars()
@@ -321,14 +388,15 @@ struct AnswerRow {
 
 async fn build(db: &PgPool, id: Uuid) -> ApiResult<(SessionReport, QuizSnapshot)> {
     #[allow(clippy::type_complexity)]
-    let (snapshot, created, started, ended_at, ended): (
+    let (snapshot, created, started, ended_at, ended, name): (
         serde_json::Value,
         OffsetDateTime,
         Option<OffsetDateTime>,
         Option<OffsetDateTime>,
         bool,
+        Option<String>,
     ) = sqlx::query_as(
-        "SELECT quiz_snapshot, created_at, started_at, ended_at, status = 'ended' \
+        "SELECT quiz_snapshot, created_at, started_at, ended_at, status = 'ended', name \
          FROM game_sessions WHERE id = $1",
     )
     .bind(id)
@@ -487,6 +555,7 @@ async fn build(db: &PgPool, id: Uuid) -> ApiResult<(SessionReport, QuizSnapshot)
     let report = SessionReport {
         session: SessionSummary {
             id: id.to_string(),
+            name,
             quiz_title: snapshot.title.clone(),
             started_at: rfc3339(started.unwrap_or(created)),
             ended_at: ended_at.map(rfc3339),
@@ -693,6 +762,7 @@ fn xlsx(r: &SessionReport, snapshot: &QuizSnapshot) -> ApiResult<Vec<u8>> {
 
     let s = &r.session;
     let summary: Vec<Vec<String>> = vec![
+        vec!["game_name".into(), s.name.clone().unwrap_or_default()],
         vec!["quiz".into(), s.quiz_title.clone()],
         vec!["started_at".into(), s.started_at.clone()],
         vec!["ended_at".into(), s.ended_at.clone().unwrap_or_default()],
@@ -791,6 +861,7 @@ mod tests {
     fn file_names_are_ascii() {
         let s = SessionSummary {
             id: "x".into(),
+            name: None,
             quiz_title: "Địa lý Việt Nam!".into(),
             started_at: "2026-11-23T09:00:00Z".into(),
             ended_at: None,

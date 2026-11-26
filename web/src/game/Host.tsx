@@ -15,6 +15,69 @@ import { AckError, GameSocket, type SocketStatus } from "./socket";
 import { JoinQr } from "./JoinQr";
 import { Big, btn, Chip, Countdown, Muted, Notice, optionStyle, panel, Podium, Scores, Shape, Stage, timeFraction, Waiting } from "./ui";
 import { secondsLeft, useTicker } from "./useCountdown";
+import type { SessionReport } from "../generated/SessionReport";
+
+/** The lobby's "game name" box (e.g. the class), saved to the report as the
+ *  host types, so games of one quiz with different classes stay apart. */
+function GameName({ reportId }: { reportId: string }) {
+  const { t } = useTranslation();
+  const [name, setName] = useState<string | null>(null);
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const saved = useRef("");
+  useEffect(() => {
+    let live = true;
+    api<SessionReport>(`/sessions/${reportId}`)
+      .then((r) => {
+        if (!live) return;
+        saved.current = r.session.name ?? "";
+        setName((n) => n ?? saved.current);
+      })
+      .catch(() => live && setName((n) => n ?? ""));
+    return () => {
+      live = false;
+    };
+  }, [reportId]);
+  async function save() {
+    const value = (name ?? "").trim();
+    if (value === saved.current) return;
+    setState("saving");
+    try {
+      await api(`/sessions/${reportId}`, { method: "PATCH", json: { name: value || null } });
+      saved.current = value;
+      setState("saved");
+    } catch {
+      setState("error");
+    }
+  }
+  return (
+    <form
+      className="flex w-full max-w-md flex-col gap-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <label htmlFor="game-name" className="text-sm text-white/70">
+        {t("game.nameLabel")}
+      </label>
+      <input
+        id="game-name"
+        value={name ?? ""}
+        maxLength={80}
+        placeholder={t("game.namePlaceholder")}
+        onChange={(e) => {
+          setName(e.target.value);
+          setState("idle");
+        }}
+        onBlur={() => void save()}
+        className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-white placeholder:text-white/40 focus:border-white/60 focus:outline-none"
+      />
+      <span className="h-4 text-xs text-white/60" aria-live="polite">
+        {state === "saving" ? t("editor.saving") : state === "saved" ? t("game.nameSaved") : state === "error" ? t("errors.INTERNAL") : ""}
+      </span>
+    </form>
+  );
+}
 
 type View =
   | { kind: "connecting" }
@@ -244,6 +307,7 @@ export function Host() {
             </p>
             <JoinQr url={joinUrl} label={t("game.qr")} />
             <p className="break-all text-xs text-white/40">{joinUrl}</p>
+            {reportId && <GameName reportId={reportId} />}
           </section>
           <section className={`${panel} flex min-h-64 flex-col gap-4 p-6 sm:p-8`}>
             <div className="flex items-center justify-between gap-3">

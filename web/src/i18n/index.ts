@@ -3,7 +3,7 @@ import { initReactI18next } from "react-i18next";
 import vi from "./vi.json";
 import en from "./en.json";
 
-// Vietnamese is the default UI language; English is the second bundle (NFR-11).
+// English is the default UI language; Vietnamese is the second bundle (NFR-11).
 export const LANGUAGES = ["vi", "en"] as const;
 export type Language = (typeof LANGUAGES)[number];
 
@@ -14,13 +14,13 @@ function initialLanguage(): Language {
   } catch {
     // storage can be blocked; fall through to the default
   }
-  return "vi";
+  return "en";
 }
 
 void i18n.use(initReactI18next).init({
   resources: { vi: { translation: vi }, en: { translation: en } },
   lng: initialLanguage(),
-  fallbackLng: "vi",
+  fallbackLng: "en",
   interpolation: { escapeValue: false }, // React already escapes output
 });
 

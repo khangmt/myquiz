@@ -19,6 +19,7 @@ export function Report() {
   const qc = useQueryClient();
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
 
   const report = useQuery({
     queryKey: ["session", id],
@@ -30,6 +31,15 @@ export function Report() {
     mutationFn: (format: ReportFormat) =>
       api<ExportLink>(`/sessions/${id}/exports`, { method: "POST", json: { format } }),
     onSuccess: (link) => window.location.assign(link.url),
+    onError: (e) => setError(e instanceof ApiFailure ? e.code : "INTERNAL"),
+  });
+  const rename = useMutation({
+    mutationFn: (name: string) => api(`/sessions/${id}`, { method: "PATCH", json: { name: name.trim() || null } }),
+    onSuccess: () => {
+      setEditing(null);
+      void qc.invalidateQueries({ queryKey: ["session", id] });
+      void qc.invalidateQueries({ queryKey: ["sessions"] });
+    },
     onError: (e) => setError(e instanceof ApiFailure ? e.code : "INTERNAL"),
   });
   const remove = useMutation({
@@ -67,7 +77,39 @@ export function Report() {
         <Link to="/reports" className="text-sm text-slate-600 underline">
           ← {t("reports.title")}
         </Link>
-        <h1 className="text-2xl font-bold">{s.quizTitle}</h1>
+        {editing === null ? (
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h1 className="text-2xl font-bold">{s.name ?? s.quizTitle}</h1>
+            <button type="button" className="text-sm text-indigo-700 underline" onClick={() => setEditing(s.name ?? "")}>
+              {s.name ? t("reports.rename") : t("reports.addName")}
+            </button>
+          </div>
+        ) : (
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              rename.mutate(editing);
+            }}
+          >
+            <input
+              autoFocus
+              value={editing}
+              maxLength={80}
+              onChange={(e) => setEditing(e.target.value)}
+              placeholder={t("game.namePlaceholder")}
+              aria-label={t("reports.name")}
+              className="w-full max-w-sm rounded-lg border border-slate-300 px-3 py-2"
+            />
+            <button type="submit" className={primary} disabled={rename.isPending}>
+              {t("reports.saveName")}
+            </button>
+            <button type="button" className={button} onClick={() => setEditing(null)}>
+              {t("game.cancel")}
+            </button>
+          </form>
+        )}
+        {s.name && <p className="font-medium text-slate-700">{s.quizTitle}</p>}
         <p className="text-slate-600">
           {formatDate(s.startedAt, i18n.language)}
           {!s.ended && <span className="ml-2 text-amber-700">{t("reports.notFinished")}</span>}

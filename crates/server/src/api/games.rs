@@ -27,6 +27,7 @@ pub async fn create(
         .quiz_id
         .parse()
         .map_err(|_| AppError::not_found("QUIZ_NOT_FOUND"))?;
+    let name = super::reports::clean_name(body.name.as_deref())?;
     let row = load_quiz(&state.app.db, &state, &user, quiz_id, false, false).await?;
     if row.status != "published" {
         return Err(AppError::new(
@@ -55,14 +56,15 @@ pub async fn create(
         .create_game(&session.to_string(), &user.id.to_string(), &snapshot)
         .await?;
     let inserted = sqlx::query(
-        "INSERT INTO game_sessions (id, quiz_id, host_id, pin, quiz_snapshot) \
-         VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO game_sessions (id, quiz_id, host_id, pin, quiz_snapshot, name) \
+         VALUES ($1, $2, $3, $4, $5, $6)",
     )
     .bind(session)
     .bind(quiz_id)
     .bind(user.id)
     .bind(&pin)
     .bind(serde_json::to_value(&snapshot)?)
+    .bind(&name)
     .execute(&state.app.db)
     .await;
     if let Err(e) = inserted {

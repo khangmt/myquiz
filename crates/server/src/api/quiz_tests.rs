@@ -171,7 +171,11 @@ async fn create_save_publish_and_play() {
 
     let res = send(
         &env.app,
-        lan.req("POST", "/api/v1/games", Some(json!({ "quizId": id }))),
+        lan.req(
+            "POST",
+            "/api/v1/games",
+            Some(json!({ "quizId": id, "name": " Lớp A " })),
+        ),
     )
     .await;
     assert_eq!(res.status(), StatusCode::CREATED);
@@ -195,13 +199,19 @@ async fn create_save_publish_and_play() {
     let check = json_body(res).await;
     assert_eq!(check["title"], "Thủ đô");
     assert_eq!(check["locked"], false);
-    let (host, snap_title): (Uuid, String) =
-        sqlx::query_as("SELECT host_id, quiz_snapshot->>'title' FROM game_sessions WHERE id = $1")
-            .bind(game["sessionId"].as_str().unwrap().parse::<Uuid>().unwrap())
-            .fetch_one(&env.db)
-            .await
-            .unwrap();
+    let (host, snap_title, name): (Uuid, String, Option<String>) = sqlx::query_as(
+        "SELECT host_id, quiz_snapshot->>'title', name FROM game_sessions WHERE id = $1",
+    )
+    .bind(game["sessionId"].as_str().unwrap().parse::<Uuid>().unwrap())
+    .fetch_one(&env.db)
+    .await
+    .unwrap();
     assert_eq!((host, snap_title.as_str()), (lan.id, "Thủ đô"));
+    assert_eq!(
+        name.as_deref(),
+        Some("Lớp A"),
+        "the game name is trimmed and kept"
+    );
 
     // Breaking a published quiz sends it back to draft.
     let res = send(&env.app, lan.req_v("PUT", &path, 3, quiz("Thủ đô", vec![]))).await;
@@ -1054,6 +1064,7 @@ async fn every_private_endpoint_needs_a_session_and_csrf() {
         ("POST", "/api/v1/games".into()),
         ("GET", "/api/v1/sessions".into()),
         ("GET", format!("/api/v1/sessions/{id}")),
+        ("PATCH", format!("/api/v1/sessions/{id}")),
         ("DELETE", format!("/api/v1/sessions/{id}")),
         ("POST", format!("/api/v1/sessions/{id}/exports")),
         ("GET", "/api/v1/admin/users".into()),
@@ -1120,4 +1131,73 @@ async fn quizzes_due_within_three_days_are_listed_for_the_warning() {
     let list = json_body(res).await;
     assert_eq!(list.as_array().unwrap().len(), 1, "{list}");
     assert_eq!(list[0]["title"], "Sắp xoá");
+}
+
+/// Games can be named (e.g. by class), renamed, searched and the name goes
+/// into the exports.
+#[tokio::test]
+async fn games_are_named_renamed_and_searched() {
+    let env = crate::api_env_or_skip!("");
+    let host = user(&env).await;
+    let other = user(&env).await;
+    let a = finished_game(&env, &host).await;
+    let b = finished_game(&env, &host).await;
+
+    let rename = |who: &User, id: Uuid, name: serde_json::Value| {
+        who.req(
+            "PATCH",
+            &format!("/api/v1/sessions/{id}"),
+            Some(json!({ "name": name })),
+        )
+    };
+    let res = send(&env.app, rename(&host, a, json!("  SE101.A, Tuesday  "))).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(json_body(res).await["name"], "SE101.A, Tuesday", "trimmed");
+    let res = send(&env.app, rename(&host, b, json!("SE101.B"))).await;
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Only the host may rename; too long is refused.
+    let res = send(&env.app, rename(&other, a, json!("mine"))).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let res = send(&env.app, rename(&host, a, json!("x".repeat(81)))).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    // The list shows names and filters by name or quiz title.
+    let page = json_body(send(&env.app, host.req("GET", "/api/v1/sessions", None)).await).await;
+    assert_eq!(page["total"], 2);
+    let page = json_body(
+        send(
+            &env.app,
+            host.req("GET", "/api/v1/sessions?q=se101.a", None),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(page["total"], 1);
+    assert_eq!(page["items"][0]["name"], "SE101.A, Tuesday");
+    let page =
+        json_body(send(&env.app, host.req("GET", "/api/v1/sessions?q=%25", None)).await).await;
+    assert_eq!(page["total"], 0, "% is matched literally");
+    let page = json_body(
+        send(
+            &env.app,
+            host.req("GET", "/api/v1/sessions?q=%C4%91%E1%BB%8Ba", None),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(page["total"], 2, "quiz title matches too");
+
+    // The report and the export carry the name; blank clears it.
+    let r = json_body(
+        send(
+            &env.app,
+            host.req("GET", &format!("/api/v1/sessions/{b}"), None),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(r["session"]["name"], "SE101.B");
+    let res = send(&env.app, rename(&host, b, json!("  "))).await;
+    assert!(json_body(res).await["name"].is_null());
 }

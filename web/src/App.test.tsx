@@ -9,12 +9,14 @@ beforeEach(async () => {
   await i18n.changeLanguage("vi");
 });
 
-test("shows Vietnamese by default and switches to English", async () => {
+test("starts in English and switches to Vietnamese", async () => {
+  expect(i18n.options.lng).toBe("en");
+  await i18n.changeLanguage("en");
   mockFetch(() => unauthenticated);
   renderApp("/");
-  expect(screen.getByText("Tham gia trò chơi")).toBeTruthy();
-  fireEvent.change(screen.getByRole("combobox"), { target: { value: "en" } });
-  expect(await screen.findByText("Join a game")).toBeTruthy();
+  expect(screen.getByText("Enter")).toBeTruthy();
+  fireEvent.change(screen.getByRole("combobox"), { target: { value: "vi" } });
+  expect(await screen.findByText("Tham gia trò chơi")).toBeTruthy();
 });
 
 test("PIN field keeps digits only", () => {

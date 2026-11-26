@@ -117,7 +117,8 @@
     "CAPACITY_FULL": "Máy chủ đang có quá nhiều trò chơi; hãy thử lại sau vài phút.",
     "SESSION_NOT_FOUND": "Không tìm thấy báo cáo.",
     "CANNOT_SUSPEND_SELF": "Quản trị viên không thể tự khóa tài khoản của mình.",
-    "USER_NOT_FOUND": "Không tìm thấy người dùng."
+    "USER_NOT_FOUND": "Không tìm thấy người dùng.",
+    "NAME_LENGTH": "Tên lượt chơi tối đa 80 ký tự."
   },
   "editor": {
     "saved": "Đã lưu",
@@ -244,7 +245,10 @@
     "cancel": "Huỷ",
     "waitForOthers": "Đang chờ những người chơi khác…",
     "waitingForPlayers": "Đang chờ người chơi vào phòng…",
-    "lockedBadge": "Phòng đã khoá"
+    "lockedBadge": "Phòng đã khoá",
+    "nameLabel": "Tên lượt chơi (vd: lớp)",
+    "namePlaceholder": "vd: SE101.A, Thứ Ba",
+    "nameSaved": "Đã lưu vào báo cáo"
   },
   "reports": {
     "title": "Báo cáo trò chơi",
@@ -274,7 +278,14 @@
     "downloadCsvSummary": "Tải CSV (tổng hợp)",
     "delete": "Xoá báo cáo",
     "confirmDelete": "Xoá vĩnh viễn báo cáo này? Không thể hoàn tác.",
-    "view": "Xem báo cáo"
+    "view": "Xem báo cáo",
+    "name": "Tên lượt chơi",
+    "unnamed": "(chưa đặt tên)",
+    "search": "Tìm theo tên lượt chơi hoặc bộ câu hỏi",
+    "noMatch": "Không có lượt chơi nào khớp.",
+    "rename": "Đổi tên",
+    "addName": "Đặt tên",
+    "saveName": "Lưu"
   },
   "admin": {
     "title": "Quản trị",

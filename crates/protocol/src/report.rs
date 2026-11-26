@@ -10,6 +10,8 @@ use ts_rs::TS;
 #[ts(export, export_to = "../../../web/src/generated/")]
 pub struct SessionSummary {
     pub id: String,
+    /// The host's name for this game (e.g. the class), if any.
+    pub name: Option<String>,
     pub quiz_title: String,
     /// RFC 3339.
     pub started_at: String,
@@ -116,4 +118,12 @@ pub enum ReportFormat {
 #[ts(export, export_to = "../../../web/src/generated/")]
 pub struct ReportExport {
     pub format: ReportFormat,
+}
+
+/// Body of `PATCH /sessions/:id`: rename a game. Blank or null clears it.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct RenameSession {
+    pub name: Option<String>,
 }
