@@ -13,6 +13,27 @@ use myquiz_engine::{GameState, OptionId, Submission};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// The looks a host can give a game. Both use the same palette; each draws
+/// the avatars in its own style.
+pub const THEMES: &[&str] = &["cute", "anime"];
+
+/// The player avatars, by id. The web client draws them
+/// (`web/src/game/avatars.tsx`) and must list the same ids; each theme draws
+/// its own character for an id.
+pub const AVATARS: &[&str] = &[
+    "bunny", "kitty", "froggy", "ducky", "bear", "fox", "panda", "chick", "piggy", "koala",
+    "mouse", "seal",
+];
+
+/// The avatar to show: the one asked for when it is known, otherwise one
+/// picked from `seed` so a player keeps the same face all game.
+pub fn pick_avatar(asked: Option<&str>, seed: u32) -> String {
+    match asked {
+        Some(a) if AVATARS.contains(&a) => a.to_string(),
+        _ => AVATARS[seed as usize % AVATARS.len()].to_string(),
+    }
+}
+
 macro_rules! wire {
     ($($item:item)*) => {
         $(
@@ -42,6 +63,8 @@ pub enum ClientMessage {
     HostAttach(HostAttach),
     #[serde(rename = "host:lock")]
     HostLock(HostLock),
+    #[serde(rename = "host:theme")]
+    HostTheme(HostTheme),
     #[serde(rename = "host:kick")]
     HostKick(HostKick),
     #[serde(rename = "host:start")]
@@ -70,11 +93,21 @@ pub struct Empty {}
 wire! {
     pub struct HostAttach { pub pin: String }
     pub struct HostLock { pub locked: bool }
+    /// The game's look, one of [`THEMES`]; only while in the lobby.
+    pub struct HostTheme { pub theme: String }
     pub struct HostKick { pub player_id: String }
     pub struct HostNext { pub expect: GameState }
     pub struct HostSkip { pub index: usize }
 
-    pub struct PlayerJoin { pub pin: String, pub nickname: String, pub device_id: String }
+    pub struct PlayerJoin {
+        pub pin: String,
+        pub nickname: String,
+        pub device_id: String,
+        /// One of [`AVATARS`]. Older clients send none and get one assigned.
+        #[serde(default)]
+        #[ts(optional)]
+        pub avatar: Option<String>,
+    }
     pub struct PlayerResume { pub pin: String, pub token: String }
 
     pub struct AnswerSubmit {
@@ -96,6 +129,8 @@ wire! {
         pub pin: String,
         pub state: GameState,
         pub locked: bool,
+        /// The look the host picked, one of [`THEMES`].
+        pub theme: String,
         pub players: Vec<LobbyPlayer>,
         /// Set while a question is running.
         pub question: Option<QuestionStart>,
@@ -118,6 +153,7 @@ wire! {
     pub struct MyStanding {
         pub player_id: String,
         pub nickname: String,
+        pub avatar: String,
         #[ts(type = "number")]
         pub score: u64,
         pub rank: u32,
@@ -127,7 +163,7 @@ wire! {
 
     // ---- server pushes ----
 
-    pub struct LobbyPlayer { pub id: String, pub nickname: String }
+    pub struct LobbyPlayer { pub id: String, pub nickname: String, pub avatar: String }
     pub struct LobbyUpdate { pub players: Vec<LobbyPlayer>, pub count: usize, pub locked: bool }
     pub struct LobbyJoined { pub nickname: String, pub player_count: usize }
 
@@ -164,10 +200,11 @@ wire! {
         pub correct_option_ids: Vec<OptionId>,
     }
 
-    pub struct ScoreRow { pub nickname: String, #[ts(type = "number")] pub score: u64 }
+    pub struct ScoreRow { pub nickname: String, pub avatar: String, #[ts(type = "number")] pub score: u64 }
     pub struct Leaderboard { pub top: Vec<ScoreRow> }
 
     pub struct GameEnded { pub reason: EndReason }
+    pub struct GameTheme { pub theme: String }
     pub struct ErrorPush { pub code: String }
 }
 
@@ -206,6 +243,8 @@ pub enum ServerPush {
     GamePodium(Leaderboard),
     #[serde(rename = "game:ended")]
     GameEnded(GameEnded),
+    #[serde(rename = "game:theme")]
+    GameTheme(GameTheme),
     #[serde(rename = "error")]
     Error(ErrorPush),
 }

@@ -2,6 +2,7 @@
 import type { Empty } from "./Empty";
 import type { ErrorPush } from "./ErrorPush";
 import type { GameEnded } from "./GameEnded";
+import type { GameTheme } from "./GameTheme";
 import type { Leaderboard } from "./Leaderboard";
 import type { LobbyJoined } from "./LobbyJoined";
 import type { LobbyUpdate } from "./LobbyUpdate";
@@ -13,4 +14,4 @@ import type { QuestionStart } from "./QuestionStart";
 /**
  * Everything the server pushes, with its event name.
  */
-export type ServerPush = { "t": "lobby:update", "d": LobbyUpdate } | { "t": "lobby:joined", "d": LobbyJoined } | { "t": "player:kicked", "d": Empty } | { "t": "question:start", "d": QuestionStart } | { "t": "question:progress", "d": QuestionProgress } | { "t": "question:reveal", "d": QuestionReveal } | { "t": "question:result", "d": QuestionResult } | { "t": "leaderboard:show", "d": Leaderboard } | { "t": "game:podium", "d": Leaderboard } | { "t": "game:ended", "d": GameEnded } | { "t": "error", "d": ErrorPush };
+export type ServerPush = { "t": "lobby:update", "d": LobbyUpdate } | { "t": "lobby:joined", "d": LobbyJoined } | { "t": "player:kicked", "d": Empty } | { "t": "question:start", "d": QuestionStart } | { "t": "question:progress", "d": QuestionProgress } | { "t": "question:reveal", "d": QuestionReveal } | { "t": "question:result", "d": QuestionResult } | { "t": "leaderboard:show", "d": Leaderboard } | { "t": "game:podium", "d": Leaderboard } | { "t": "game:ended", "d": GameEnded } | { "t": "game:theme", "d": GameTheme } | { "t": "error", "d": ErrorPush };

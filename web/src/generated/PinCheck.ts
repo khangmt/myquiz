@@ -7,4 +7,8 @@ export type PinCheck = { pin: string, title: string,
 /**
  * The host locked the lobby: new players cannot join.
  */
-locked: boolean, };
+locked: boolean, 
+/**
+ * The game's look (see `ws::THEMES`), so the avatar picker matches.
+ */
+theme: string, };

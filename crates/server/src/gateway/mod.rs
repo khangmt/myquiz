@@ -480,6 +480,9 @@ impl Connection {
                         svc.lock(&pin, l.locked).await?;
                         ok()
                     }
+                    ClientMessage::HostTheme(th) => {
+                        svc.set_theme(&pin, &th.theme).await?.map(|_| json!({}))
+                    }
                     ClientMessage::HostKick(k) => {
                         svc.kick(&pin, &k.player_id).await?.map(|_| json!({}))
                     }

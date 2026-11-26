@@ -6,6 +6,7 @@ import type { HostKick } from "./HostKick";
 import type { HostLock } from "./HostLock";
 import type { HostNext } from "./HostNext";
 import type { HostSkip } from "./HostSkip";
+import type { HostTheme } from "./HostTheme";
 import type { PlayerJoin } from "./PlayerJoin";
 import type { PlayerResume } from "./PlayerResume";
 import type { TimePing } from "./TimePing";
@@ -13,4 +14,4 @@ import type { TimePing } from "./TimePing";
 /**
  * Everything a client may send.
  */
-export type ClientMessage = { "t": "host:attach", "d": HostAttach } | { "t": "host:lock", "d": HostLock } | { "t": "host:kick", "d": HostKick } | { "t": "host:start", "d": Empty } | { "t": "host:next", "d": HostNext } | { "t": "host:skip", "d": HostSkip } | { "t": "host:end", "d": Empty } | { "t": "player:join", "d": PlayerJoin } | { "t": "player:resume", "d": PlayerResume } | { "t": "answer:submit", "d": AnswerSubmit } | { "t": "time:ping", "d": TimePing };
+export type ClientMessage = { "t": "host:attach", "d": HostAttach } | { "t": "host:lock", "d": HostLock } | { "t": "host:theme", "d": HostTheme } | { "t": "host:kick", "d": HostKick } | { "t": "host:start", "d": Empty } | { "t": "host:next", "d": HostNext } | { "t": "host:skip", "d": HostSkip } | { "t": "host:end", "d": Empty } | { "t": "player:join", "d": PlayerJoin } | { "t": "player:resume", "d": PlayerResume } | { "t": "answer:submit", "d": AnswerSubmit } | { "t": "time:ping", "d": TimePing };

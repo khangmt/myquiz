@@ -11,7 +11,11 @@ import type { ScoreRow } from "./ScoreRow";
  * Sent on host:attach, player:join and player:resume so a (re)connecting
  * screen can draw itself without waiting for the next push.
  */
-export type GameSnapshot = { pin: string, state: GameState, locked: boolean, players: Array<LobbyPlayer>, 
+export type GameSnapshot = { pin: string, state: GameState, locked: boolean, 
+/**
+ * The look the host picked, one of [`THEMES`].
+ */
+theme: string, players: Array<LobbyPlayer>, 
 /**
  * Set while a question is running.
  */

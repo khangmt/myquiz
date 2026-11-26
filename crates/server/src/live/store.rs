@@ -47,6 +47,9 @@ static CLOCK: LazyLock<Script> = script!("clock");
 #[serde(rename_all = "camelCase")]
 pub struct PlayerRecord {
     pub nickname: String,
+    /// The player's avatar id; empty for records written before avatars.
+    #[serde(default)]
+    pub avatar: String,
     /// Normalised nickname used for uniqueness.
     pub nick_key: String,
     pub device_id: String,
@@ -63,6 +66,7 @@ pub struct PlayerRecord {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewPlayer {
     pub nickname: String,
+    pub avatar: String,
     pub device_id: String,
     pub user_id: Option<String>,
     pub token_hash: String,
@@ -86,6 +90,8 @@ pub struct GameMeta {
     pub host: String,
     pub total: usize,
     pub locked: bool,
+    /// One of `ws::THEMES`; "cute" until the host picks another.
+    pub theme: String,
     pub starts_at_ms: u64,
     pub ends_at_ms: u64,
     pub answered: u32,
@@ -272,6 +278,10 @@ impl LiveStore {
             host: get("host").into(),
             total: num("total") as usize,
             locked: get("locked") == "1",
+            theme: match get("theme") {
+                "" => "cute".into(),
+                t => t.into(),
+            },
             starts_at_ms: num("startsAt"),
             ends_at_ms: num("endsAt"),
             answered: num("answered") as u32,
@@ -309,6 +319,7 @@ impl LiveStore {
     ) -> Result<std::result::Result<u32, JoinRefusal>> {
         let record = PlayerRecord {
             nickname: p.nickname.clone(),
+            avatar: p.avatar.clone(),
             nick_key: nick_key(&p.nickname),
             device_id: p.device_id.clone(),
             user_id: p.user_id.clone(),
@@ -371,6 +382,12 @@ impl LiveStore {
             .redis
             .hset(keys::game(pin), ("locked", if locked { "1" } else { "0" }))
             .await?;
+        Ok(())
+    }
+
+    /// Sets the game's look.
+    pub async fn set_theme(&self, pin: &str, theme: &str) -> Result<()> {
+        let _: i64 = self.redis.hset(keys::game(pin), ("theme", theme)).await?;
         Ok(())
     }
 

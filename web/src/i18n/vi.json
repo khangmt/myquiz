@@ -248,7 +248,26 @@
     "lockedBadge": "Phòng đã khoá",
     "nameLabel": "Tên lượt chơi (vd: lớp)",
     "namePlaceholder": "vd: SE101.A, Thứ Ba",
-    "nameSaved": "Đã lưu vào báo cáo"
+    "nameSaved": "Đã lưu vào báo cáo",
+    "pickAvatar": "Chọn bạn đồng hành",
+    "music": {
+      "label": "Nhạc nền",
+      "off": "Tắt",
+      "mute": "Tắt tiếng nhạc",
+      "unmute": "Bật tiếng nhạc",
+      "volume": "Âm lượng nhạc",
+      "tracks": {
+        "beach": "Bãi biển vui nhộn",
+        "garden": "Dạo vườn",
+        "thinking": "Giờ suy nghĩ",
+        "river": "Dòng sông lười"
+      }
+    },
+    "theme": {
+      "label": "Phong cách",
+      "cute": "Dễ thương",
+      "anime": "Anime"
+    }
   },
   "reports": {
     "title": "Báo cáo trò chơi",

@@ -99,6 +99,7 @@ impl GameService {
                     Some(r) => Some(MyStanding {
                         player_id: id.to_string(),
                         nickname: r.standing.player.1.clone(),
+                        avatar: r.standing.player.2.clone(),
                         score: r.standing.score,
                         rank: r.rank,
                         answered: match meta.state {
@@ -168,6 +169,7 @@ impl GameService {
             pin: pin.to_string(),
             state: meta.state,
             locked: meta.locked,
+            theme: meta.theme.clone(),
             players: lobby_list(&players),
             question,
             report_id: for_host.then(|| meta.session.clone()),
@@ -194,6 +196,29 @@ impl GameService {
             Some(m) if m.host != user_id => Ok(Err("FORBIDDEN")),
             _ => Ok(Err("PIN_INVALID")),
         }
+    }
+
+    /// `host:theme`: the host picks the game's look in the lobby.
+    pub async fn set_theme(&self, pin: &str, theme: &str) -> Result<Result<(), Code>> {
+        if !THEMES.contains(&theme) {
+            return Ok(Err("INVALID"));
+        }
+        let Some(meta) = self.store.meta(pin).await? else {
+            return Ok(Err("PIN_INVALID"));
+        };
+        if meta.state != GameState::Lobby {
+            return Ok(Err("WRONG_STATE"));
+        }
+        self.store.set_theme(pin, theme).await?;
+        self.hub
+            .to_all(
+                pin,
+                &ServerPush::GameTheme(GameTheme {
+                    theme: theme.into(),
+                }),
+            )
+            .await?;
+        Ok(Ok(()))
     }
 
     pub async fn lock(&self, pin: &str, locked: bool) -> Result<()> {
@@ -350,6 +375,7 @@ impl GameService {
                 &player_id,
                 &NewPlayer {
                     nickname: nickname.clone(),
+                    avatar: pick_avatar(req.avatar.as_deref(), rand::random()),
                     device_id: req.device_id.clone(),
                     user_id: user_id.clone(),
                     token_hash: secrets::hash_token(&token),
@@ -720,17 +746,28 @@ fn lobby_list(players: &[(String, PlayerRecord)]) -> Vec<LobbyPlayer> {
         .map(|(id, p)| LobbyPlayer {
             id: id.clone(),
             nickname: p.nickname.clone(),
+            avatar: avatar_of(id, p),
         })
         .collect()
 }
 
+/// The stored avatar, or a stable stand-in for players who joined before
+/// avatars existed.
+fn avatar_of(id: &str, p: &PlayerRecord) -> String {
+    if p.avatar.is_empty() {
+        pick_avatar(None, p.join_order.wrapping_add(id.len() as u32))
+    } else {
+        p.avatar.clone()
+    }
+}
+
 /// Ranks players: score, then total time, then join order (FR-SC-03).
-fn ranked(players: &[(String, PlayerRecord)]) -> Vec<Ranked<(String, String)>> {
+fn ranked(players: &[(String, PlayerRecord)]) -> Vec<Ranked<(String, String, String)>> {
     rank(
         players
             .iter()
             .map(|(id, p)| Standing {
-                player: (id.clone(), p.nickname.clone()),
+                player: (id.clone(), p.nickname.clone(), avatar_of(id, p)),
                 score: p.score,
                 total_time_ms: p.time_ms,
                 join_order: p.join_order,
@@ -739,11 +776,12 @@ fn ranked(players: &[(String, PlayerRecord)]) -> Vec<Ranked<(String, String)>> {
     )
 }
 
-fn rows(ranked: &[Ranked<(String, String)>]) -> Vec<ScoreRow> {
+fn rows(ranked: &[Ranked<(String, String, String)>]) -> Vec<ScoreRow> {
     ranked
         .iter()
         .map(|r| ScoreRow {
             nickname: r.standing.player.1.clone(),
+            avatar: r.standing.player.2.clone(),
             score: r.standing.score,
         })
         .collect()

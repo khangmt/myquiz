@@ -701,3 +701,64 @@ async fn sockets_from_other_sites_are_refused() {
     }
     assert!(open(format!("http://{}", env.addr)).await.is_ok());
 }
+
+#[tokio::test]
+async fn avatars_and_theme() {
+    let env = env_or_skip!();
+    let (pin, sid, _) = seed_game(&env).await;
+    let mut host = Bot::connect(&env.addr, Some(&sid)).await;
+    let snap = host.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["theme"], "cute");
+
+    // A known avatar is kept; an unknown one, or none, gets a real one.
+    let mut a = Bot::connect(&env.addr, None).await;
+    let joined = a
+        .ok(
+            "player:join",
+            json!({ "pin": pin, "nickname": "Ana", "deviceId": "dev-a", "avatar": "froggy" }),
+        )
+        .await;
+    assert_eq!(joined["snapshot"]["me"]["avatar"], "froggy");
+    let mut b = Bot::connect(&env.addr, None).await;
+    let joined = b
+        .ok(
+            "player:join",
+            json!({ "pin": pin, "nickname": "Bao", "deviceId": "dev-b", "avatar": "<script>" }),
+        )
+        .await;
+    let given = joined["snapshot"]["me"]["avatar"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(myquiz_protocol::ws::AVATARS.contains(&given.as_str()));
+    let lobby = loop {
+        let l = host.push("lobby:update").await;
+        if l["count"] == 2 {
+            break l;
+        }
+    };
+    assert_eq!(lobby["players"][0]["avatar"], "froggy");
+
+    // The host picks the anime look in the lobby; everyone hears about it.
+    assert_eq!(
+        host.req("host:theme", json!({ "theme": "neon" })).await["code"],
+        "INVALID"
+    );
+    host.ok("host:theme", json!({ "theme": "anime" })).await;
+    assert_eq!(a.push("game:theme").await["theme"], "anime");
+    assert_eq!(host.push("game:theme").await["theme"], "anime");
+    // Players may not change it.
+    assert_eq!(
+        a.req("host:theme", json!({ "theme": "cute" })).await["code"],
+        "FORBIDDEN"
+    );
+
+    // Once the game starts the look is fixed.
+    host.ok("host:start", json!({})).await;
+    assert_eq!(
+        host.req("host:theme", json!({ "theme": "cute" })).await["code"],
+        "WRONG_STATE"
+    );
+    let snap = host.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["theme"], "anime");
+}

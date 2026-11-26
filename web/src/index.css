@@ -1,6 +1,48 @@
 @import "tailwindcss";
 
+/* Colours from a gentle beach-and-river webcomic: ink outlines on cream
+   paper, mint and leaf greens, lagoon teal, coral, blush and sunshine. */
 @theme {
+  --font-sans: "Nunito Variable", "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+
+  --color-ink: #3b3a36;
+  --color-paper: #fbf7e4;
+  --color-sand: #f2eb9f;
+  --color-wood: #ceb18e;
+  --color-mint: #e3f1d6;
+  --color-leaf: #7bb474;
+  --color-leaf-deep: #4d8747;
+  --color-lagoon: #7cdeca;
+  --color-sea: #2a7a90;
+  --color-coral: #d9544c;
+  --color-blush: #f4a7a8;
+  --color-sun: #f2c14e;
+  --color-berry: #c4517f;
+
+  /* The admin pages use Tailwind's slate and indigo: warm them to match. */
+  --color-slate-50: #fbf8ec;
+  --color-slate-100: #f4efdc;
+  --color-slate-200: #e6dfc6;
+  --color-slate-300: #d2c9ab;
+  --color-slate-400: #a69d84;
+  --color-slate-500: #7a7366;
+  --color-slate-600: #5f5a52;
+  --color-slate-700: #4b4741;
+  --color-slate-800: #3b3a36;
+  --color-slate-900: #2f2e2b;
+  --color-slate-950: #1f1e1c;
+  --color-indigo-50: #eaf7f5;
+  --color-indigo-100: #cdeeea;
+  --color-indigo-200: #9fe0d6;
+  --color-indigo-300: #7cdeca;
+  --color-indigo-400: #4fb7ab;
+  --color-indigo-500: #33999a;
+  --color-indigo-600: #2a7a90;
+  --color-indigo-700: #256a7d;
+  --color-indigo-800: #205869;
+  --color-indigo-900: #1c4856;
+  --color-indigo-950: #10303a;
+
   --animate-pop: pop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
   --animate-rise: rise 0.45s ease-out both;
   --animate-grow: grow 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -35,26 +77,37 @@
   }
 }
 
-/* The live game runs on its own full-screen stage, apart from the admin
-   pages: dark, so it reads well on a projector and saves phone batteries. */
+/* The live game's full-screen stage: cream paper with soft mint and lagoon
+   washes, light enough for a bright classroom projector. */
 .game-stage {
-  background-color: #0d1030;
+  background-color: var(--color-paper);
   background-image:
-    radial-gradient(60rem 40rem at 15% -10%, rgb(99 102 241 / 0.28), transparent 60%),
-    radial-gradient(50rem 36rem at 100% 110%, rgb(14 165 233 / 0.16), transparent 60%);
+    radial-gradient(48rem 30rem at 0% 0%, rgb(124 222 202 / 0.35), transparent 60%),
+    radial-gradient(44rem 30rem at 100% 100%, rgb(123 180 116 / 0.28), transparent 60%),
+    radial-gradient(30rem 20rem at 100% 0%, rgb(242 235 159 / 0.55), transparent 60%);
   transition: background-color 0.3s ease;
 }
+/* The anime look: the same paper and palette with a fine halftone and a
+   sunburst, like a manga panel. */
+.game-stage[data-theme="anime"] {
+  background-image:
+    radial-gradient(circle, rgb(59 58 54 / 0.08) 1.1px, transparent 1.6px),
+    repeating-conic-gradient(from 0deg at 50% 0%, rgb(242 235 159 / 0.35) 0deg 6deg, transparent 6deg 14deg),
+    radial-gradient(48rem 30rem at 0% 100%, rgb(124 222 202 / 0.35), transparent 60%),
+    radial-gradient(44rem 30rem at 100% 100%, rgb(244 167 168 / 0.3), transparent 60%);
+  background-size: 14px 14px, auto, auto, auto;
+}
 .game-stage[data-tone="correct"] {
-  background-color: #047857;
-  background-image: radial-gradient(50rem 36rem at 50% 0%, rgb(255 255 255 / 0.14), transparent 65%);
+  background-color: #cfeabd;
+  background-image: radial-gradient(50rem 36rem at 50% 0%, rgb(255 255 255 / 0.5), transparent 65%);
 }
 .game-stage[data-tone="wrong"] {
-  background-color: #be123c;
-  background-image: radial-gradient(50rem 36rem at 50% 0%, rgb(255 255 255 / 0.12), transparent 65%);
+  background-color: #f8c3bd;
+  background-image: radial-gradient(50rem 36rem at 50% 0%, rgb(255 255 255 / 0.5), transparent 65%);
 }
 .game-stage[data-tone="missed"] {
-  background-color: #334155;
-  background-image: radial-gradient(50rem 36rem at 50% 0%, rgb(255 255 255 / 0.1), transparent 65%);
+  background-color: #ece4c8;
+  background-image: radial-gradient(50rem 36rem at 50% 0%, rgb(255 255 255 / 0.5), transparent 65%);
 }
 
 @media (prefers-reduced-motion: reduce) {
