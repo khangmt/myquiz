@@ -205,7 +205,7 @@ const KIDS: Record<string, Kid> = {
   chick: { hair: "#fbe38a", style: "bun", eyes: "#ec8a4b", skin: SKIN[0], bg: "#fbe0e0", extra: "leaf", extraColor: "#7bb474" },
   piggy: { hair: "#c4517f", style: "long", eyes: "#c4517f", skin: SKIN[1], bg: "#e3f1d6", extra: "bow", extraColor: "#f2c14e" },
   koala: { hair: "#5f7d8c", style: "messy", eyes: "#2a7a90", skin: SKIN[2], bg: "#f2eb9f", extra: "glasses" },
-  mouse: { hair: "#7cdeca", style: "twintails", eyes: "#2a7a90", skin: SKIN[0], bg: "#fbf3d4", extra: "star", extraColor: "#f2c14e" },
+  mouse: { hair: "#7cdeca", style: "bob", eyes: "#2a7a90", skin: SKIN[0], bg: "#fbf3d4", extra: "star", extraColor: "#f2c14e" },
   seal: { hair: "#2a7a90", style: "spiky", eyes: "#2a7a90", skin: SKIN[1], bg: "#fbf3d4", extra: "headphones", extraColor: "#d9544c" },
 };
 
