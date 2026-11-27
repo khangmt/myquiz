@@ -250,7 +250,9 @@
       "DISCONNECTED": "Disconnected, please try again.",
       "TIMEOUT": "The server didn't answer, please try again.",
       "LOCKED_REJOIN": "The lobby is locked. Only players already in the game can rejoin, under the same name.",
-      "REJOIN_WAIT": "Waiting for the host to let you back in."
+      "REJOIN_WAIT": "Waiting for the host to let you back in.",
+      "BANNED": "The host blocked this device from the game.",
+      "REMOVED": "The host removed you. You can join again with a different name."
     },
     "qr": "QR code to join the game",
     "cancel": "Cancel",
@@ -312,8 +314,10 @@
         "CHAT_BUSY": "Messages open again after the question",
         "INVALID": "Couldn't send that",
         "DISCONNECTED": "Not connected",
-        "INTERNAL": "Couldn't send that"
-      }
+        "INTERNAL": "Couldn't send that",
+        "MUTED": "The host muted your chat"
+      },
+      "muted": "The host muted your chat"
     },
     "rejoin": {
       "waitTitle": "This name is already in the game",
@@ -322,6 +326,24 @@
       "request": "{{name}} wants to rejoin from a new device.",
       "allow": "Let them in",
       "ignore": "Ignore"
+    },
+    "players": {
+      "title": "Manage players",
+      "menuFor": "Options for {{name}}",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "muteName": "Mute {{name}}",
+      "unmuteName": "Unmute {{name}}",
+      "muted": "Muted",
+      "remove": "Remove",
+      "removeHint": "They can join again with a different name",
+      "ban": "Ban",
+      "banName": "Ban {{name}}",
+      "banHint": "Removes them and blocks this device from the game",
+      "banConfirm": "Ban {{name}}? Their device can't rejoin this game.",
+      "search": "Find a player",
+      "none": "No players",
+      "close": "Close"
     }
   },
   "reports": {

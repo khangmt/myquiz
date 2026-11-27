@@ -116,9 +116,17 @@ async fn create_join_and_lobby_rules() {
         Some("p-an")
     );
 
-    // Kick: gone, token revoked, nickname free again, device barred.
-    assert!(s.kick(&pin, "p-an").await.unwrap());
-    assert!(!s.kick(&pin, "p-an").await.unwrap());
+    // Mute: kept on the record, and undone.
+    assert!(s.set_muted(&pin, "p-binh", true).await.unwrap());
+    assert!(s.player(&pin, "p-binh").await.unwrap().unwrap().muted);
+    assert!(s.set_muted(&pin, "p-binh", false).await.unwrap());
+    assert!(!s.player(&pin, "p-binh").await.unwrap().unwrap().muted);
+    assert!(!s.set_muted(&pin, "p-nobody", true).await.unwrap());
+
+    // Remove: gone, token revoked, nickname free again, and the same device
+    // may come back under another name.
+    assert!(s.kick(&pin, "p-an", false).await.unwrap());
+    assert!(!s.kick(&pin, "p-an", false).await.unwrap());
     assert_eq!(
         s.player_for_token(&pin, &an.token_hash).await.unwrap(),
         None
@@ -127,13 +135,22 @@ async fn create_join_and_lobby_rules() {
         s.join(&pin, "p-an2", &player("An again", "dev-an"))
             .await
             .unwrap(),
-        Err(JoinRefusal::Kicked)
+        Ok(Joined::New(2))
+    );
+
+    // Ban: that device stays out, under any name.
+    assert!(s.kick(&pin, "p-an2", true).await.unwrap());
+    assert_eq!(
+        s.join(&pin, "p-an3", &player("An thrice", "dev-an"))
+            .await
+            .unwrap(),
+        Err(JoinRefusal::Banned)
     );
     assert_eq!(
         s.join(&pin, "p-chi", &player("An", "dev-chi"))
             .await
             .unwrap(),
-        Ok(Joined::New(2))
+        Ok(Joined::New(3))
     );
 
     s.set_locked(&pin, true).await.unwrap();

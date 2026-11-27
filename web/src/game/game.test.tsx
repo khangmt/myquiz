@@ -161,6 +161,7 @@ test("the host runs the lobby, starts, and moves on after the reveal", async () 
   expect(await screen.findByText("http://192.168.1.20:8080/join?pin=123456")).toBeTruthy();
   expect((await screen.findByAltText("Mã QR để vào trò chơi")).getAttribute("src")).toMatch(/^data:image\/png;base64,/);
 
+  fireEvent.click(screen.getByLabelText("Tuỳ chọn cho Lan"));
   fireEvent.click(screen.getByLabelText("Mời Lan ra"));
   expect(ws.sent.at(-1)).toMatchObject({ t: "host:kick", d: { playerId: "p1" } });
   ws.ack("host:kick", {});
@@ -338,4 +339,65 @@ test("a player sends a message from the lobby, and only emoji after answering", 
   // The host turns chat off.
   ws.push("game:chat", { mode: "off" });
   await waitFor(() => expect(screen.queryByTestId("chat-bar")).toBeNull());
+});
+
+const LAN_JOINED = { playerId: "p1", token: "tok-1", snapshot: { ...lobby, chat: "open", me: { playerId: "p1", nickname: "Lan", avatar: "owl", score: 0, rank: 1, answered: false } } };
+
+async function joinAsLan() {
+  mockFetch((url) => (url.endsWith("/games/pin/123456") ? { status: 200, body: { pin: "123456", title: "Địa lý", locked: false } } : undefined));
+  renderApp("/join?pin=123456");
+  fireEvent.change(await screen.findByLabelText("Biệt danh"), { target: { value: "Lan" } });
+  fireEvent.click(screen.getByText("Vào chơi"));
+  const ws = await socket();
+  ws.ack("player:join", LAN_JOINED);
+  return ws;
+}
+
+test("a removed player goes back to the name screen to join again", async () => {
+  const ws = await joinAsLan();
+  ws.push("player:kicked", { banned: false });
+  expect(await screen.findByText("Chủ phòng đã mời bạn ra. Bạn có thể vào lại bằng tên khác.")).toBeTruthy();
+  expect(await screen.findByLabelText("Biệt danh")).toBeTruthy();
+  expect(localStorage.getItem("myquiz.player.123456")).toBeNull();
+});
+
+test("a banned player is told and stays out", async () => {
+  const ws = await joinAsLan();
+  ws.push("player:kicked", { banned: true });
+  expect(await screen.findByText("Chủ phòng đã chặn thiết bị này khỏi trò chơi.")).toBeTruthy();
+  expect(screen.queryByLabelText("Biệt danh")).toBeNull();
+});
+
+test("a muted player sees chat closed until unmuted", async () => {
+  const ws = await joinAsLan();
+  expect(await screen.findByLabelText("Vỗ tay")).toBeTruthy();
+  ws.push("player:muted", { muted: true });
+  expect(await screen.findByText("Chủ phòng đã tắt chat của bạn")).toBeTruthy();
+  expect(screen.queryByLabelText("Vỗ tay")).toBeNull();
+  ws.push("player:muted", { muted: false });
+  expect(await screen.findByLabelText("Vỗ tay")).toBeTruthy();
+});
+
+test("the host mutes in the lobby and bans mid-game after confirming", async () => {
+  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : undefined));
+  renderApp("/host/123456");
+  const ws = await socket();
+  ws.ack("host:attach", { ...lobby, reportId: "s-42", players: [{ id: "p1", nickname: "Lan", avatar: "owl", muted: false }] });
+
+  fireEvent.click(await screen.findByLabelText("Tuỳ chọn cho Lan"));
+  fireEvent.click(screen.getByLabelText("Tắt chat của Lan"));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "host:mute", d: { playerId: "p1", muted: true } });
+  ws.ack("host:mute", {});
+  ws.push("lobby:update", { players: [{ id: "p1", nickname: "Lan", avatar: "owl", muted: true }], count: 1, locked: false });
+  expect(await screen.findByLabelText("Đã tắt chat")).toBeTruthy();
+
+  // During a question the player count opens the list.
+  ws.push("question:start", question());
+  fireEvent.click(await screen.findByLabelText("Quản lý người chơi"));
+  expect(screen.getByRole("dialog")).toBeTruthy();
+  expect(screen.getByLabelText("Bật chat cho Lan")).toBeTruthy();
+  fireEvent.click(screen.getByLabelText("Chặn Lan"));
+  expect(ws.sent.at(-1)?.t).not.toBe("host:ban");
+  fireEvent.click(screen.getByText("Chặn"));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "host:ban", d: { playerId: "p1" } });
 });

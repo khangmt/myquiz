@@ -38,6 +38,7 @@ macro_rules! script {
 static CREATE: LazyLock<Script> = script!("create");
 static JOIN: LazyLock<Script> = script!("join");
 static KICK: LazyLock<Script> = script!("kick");
+static MUTE: LazyLock<Script> = script!("mute");
 static TRANSITION: LazyLock<Script> = script!("transition");
 static REVEAL: LazyLock<Script> = script!("reveal");
 static ANSWER: LazyLock<Script> = script!("answer");
@@ -66,6 +67,9 @@ pub struct PlayerRecord {
     pub time_ms: u64,
     #[serde(default)]
     pub join_order: u32,
+    /// The host muted this player's chat.
+    #[serde(default)]
+    pub muted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,7 +85,8 @@ pub struct NewPlayer {
 pub enum JoinRefusal {
     PinInvalid,
     Locked,
-    Kicked,
+    /// The host banned this device or signed-in account from the game.
+    Banned,
     Full,
     NickTaken,
     /// The name belongs to an offline player on another device; the host
@@ -361,6 +366,7 @@ impl LiveStore {
             score: 0,
             time_ms: 0,
             join_order: 0,
+            muted: false,
         };
         let out = array(
             self.run(
@@ -397,15 +403,17 @@ impl LiveStore {
             }),
             "PIN_INVALID" => Err(JoinRefusal::PinInvalid),
             "LOCKED" => Err(JoinRefusal::Locked),
-            "KICKED" => Err(JoinRefusal::Kicked),
+            "BANNED" => Err(JoinRefusal::Banned),
             "FULL" => Err(JoinRefusal::Full),
             "NICK_TAKEN" => Err(JoinRefusal::NickTaken),
             other => bail!("unexpected join result {other}"),
         })
     }
 
-    /// Removes a player and bars their device from this game (FR-GM-03).
-    pub async fn kick(&self, pin: &str, player_id: &str) -> Result<bool> {
+    /// Removes a player (FR-GM-03). With `ban`, their device and signed-in
+    /// account cannot rejoin this game; without it they may join again
+    /// under another name.
+    pub async fn kick(&self, pin: &str, player_id: &str, ban: bool) -> Result<bool> {
         let out = self
             .run(
                 &KICK,
@@ -415,7 +423,19 @@ impl LiveStore {
                     keys::nicks(pin),
                     keys::kicked(pin),
                 ],
-                vec![player_id.into()],
+                vec![player_id.into(), if ban { "1" } else { "0" }.into()],
+            )
+            .await?;
+        Ok(int(&out)? == 1)
+    }
+
+    /// Mutes or unmutes a player's chat. False if no such player.
+    pub async fn set_muted(&self, pin: &str, player_id: &str, muted: bool) -> Result<bool> {
+        let out = self
+            .run(
+                &MUTE,
+                vec![keys::players(pin)],
+                vec![player_id.into(), if muted { "1" } else { "0" }.into()],
             )
             .await?;
         Ok(int(&out)? == 1)

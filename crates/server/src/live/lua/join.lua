@@ -1,7 +1,8 @@
 -- Add a player, or let a returning player take their name back
 -- (FR-GM-02, FR-GM-03, FR-GM-04, FR-GM-09).
 -- KEYS[1] game:<pin>  KEYS[2] game:<pin>:players  KEYS[3] game:<pin>:tokens
--- KEYS[4] game:<pin>:nicks  KEYS[5] game:<pin>:kicked  KEYS[6] game:<pin>:online
+-- KEYS[4] game:<pin>:nicks  KEYS[5] game:<pin>:kicked (banned devices and
+-- 'user:<id>' accounts)  KEYS[6] game:<pin>:online
 -- KEYS[7] game:<pin>:rejoin (player id -> device asking to rejoin)
 -- KEYS[8] game:<pin>:rejoin:ok (player id -> device the host let back in)
 -- ARGV[1] player id  ARGV[2] player record JSON (without joinOrder)
@@ -13,7 +14,10 @@ local state = redis.call('HGET', KEYS[1], 'state')
 if not state then return {'PIN_INVALID'} end
 if state == 'podium' or state == 'ended' then return {'PIN_INVALID'} end
 if ARGV[5] ~= '' and redis.call('SISMEMBER', KEYS[5], ARGV[5]) == 1 then
-  return {'KICKED'}
+  return {'BANNED'}
+end
+if ARGV[7] ~= '' and redis.call('SISMEMBER', KEYS[5], 'user:' .. ARGV[7]) == 1 then
+  return {'BANNED'}
 end
 local ttl = redis.call('TTL', KEYS[1])
 

@@ -4,4 +4,8 @@ export type MyStanding = { playerId: string, nickname: string, avatar: string, s
 /**
  * Whether this player already answered the running question.
  */
-answered: boolean, };
+answered: boolean, 
+/**
+ * The host muted this player's chat.
+ */
+muted: boolean, };
