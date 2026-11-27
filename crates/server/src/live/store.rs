@@ -45,6 +45,7 @@ static DUE: LazyLock<Script> = script!("due");
 static SCORES: LazyLock<Script> = script!("scores");
 static FINISH: LazyLock<Script> = script!("finish");
 static CLOCK: LazyLock<Script> = script!("clock");
+static CHAT: LazyLock<Script> = script!("chat");
 
 /// A player as stored in `game:<pin>:players`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,6 +101,16 @@ pub enum Joined {
     Reclaimed { player_id: String },
 }
 
+/// The answer of [`LiveStore::chat_slot`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatSlot {
+    Granted,
+    /// This player sent one too recently.
+    TooSoon,
+    /// The game as a whole is over its rate.
+    GameBusy,
+}
+
 /// The game hash, parsed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GameMeta {
@@ -110,6 +121,8 @@ pub struct GameMeta {
     pub locked: bool,
     /// One of `ws::THEMES`; "cute" until the host picks another.
     pub theme: String,
+    /// One of `ws::CHAT_MODES`; "open" until the host changes it.
+    pub chat: String,
     pub starts_at_ms: u64,
     pub ends_at_ms: u64,
     pub answered: u32,
@@ -300,6 +313,10 @@ impl LiveStore {
                 "" => "cute".into(),
                 t => t.into(),
             },
+            chat: match get("chat") {
+                "" => "open".into(),
+                c => c.into(),
+            },
             starts_at_ms: num("startsAt"),
             ends_at_ms: num("endsAt"),
             answered: num("answered") as u32,
@@ -459,6 +476,46 @@ impl LiveStore {
     pub async fn set_theme(&self, pin: &str, theme: &str) -> Result<()> {
         let _: i64 = self.redis.hset(keys::game(pin), ("theme", theme)).await?;
         Ok(())
+    }
+
+    /// Sets who may chat: everyone, emoji only, or nobody.
+    pub async fn set_chat(&self, pin: &str, mode: &str) -> Result<()> {
+        let _: i64 = self.redis.hset(keys::game(pin), ("chat", mode)).await?;
+        Ok(())
+    }
+
+    /// One player, if they are (still) in the game.
+    pub async fn player(&self, pin: &str, player_id: &str) -> Result<Option<PlayerRecord>> {
+        let raw: Option<String> = self.redis.hget(keys::players(pin), player_id).await?;
+        raw.map(|s| serde_json::from_str(&s).context("bad player record"))
+            .transpose()
+    }
+
+    /// Takes a chat slot: the player's cooldown for this kind of message and
+    /// the game's messages-per-second cap (see `lua/chat.lua`).
+    pub async fn chat_slot(
+        &self,
+        pin: &str,
+        player_id: &str,
+        kind: &str,
+        cooldown_ms: u64,
+        per_game_per_sec: u32,
+    ) -> Result<ChatSlot> {
+        let out = self
+            .run(
+                &CHAT,
+                vec![
+                    keys::chat_cooldown(pin, player_id, kind),
+                    keys::chat_rate(pin),
+                ],
+                vec![cooldown_ms.to_string(), per_game_per_sec.to_string()],
+            )
+            .await?;
+        Ok(match int(&out)? {
+            1 => ChatSlot::Granted,
+            0 => ChatSlot::TooSoon,
+            _ => ChatSlot::GameBusy,
+        })
     }
 
     /// Writes `to` if the game is still in `from` (compare-and-set). For a

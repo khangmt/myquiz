@@ -5,6 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { api, ApiFailure } from "../api/client";
 import { ProblemList } from "../components/ProblemList";
 import type { ExportLink } from "../generated/ExportLink";
+import type { GameCreated } from "../generated/GameCreated";
 import type { Imported } from "../generated/Imported";
 import type { ImportProblem } from "../generated/ImportProblem";
 import type { QuizDoc } from "../generated/QuizDoc";
@@ -22,6 +23,7 @@ export function daysLeft(expiresAt: string, now = Date.now()): number {
 type Notice =
   | { kind: "importErrors"; problems: ImportProblem[] }
   | { kind: "exportErrors"; title: string; problems: QuizProblemDoc[] }
+  | { kind: "hostErrors"; title: string; problems: QuizProblemDoc[] }
   | { kind: "error"; code: string }
   | { kind: "imported" };
 
@@ -78,6 +80,23 @@ export function QuizList() {
       if (e instanceof ApiFailure && e.code === "QUIZ_INVALID") {
         const problems = (e.body as { problems?: QuizProblemDoc[] }).problems ?? [];
         setNotice({ kind: "exportErrors", title: q.title, problems });
+      } else fail(e);
+    },
+  });
+  // "Host live" right from the list: a draft is published first, so one
+  // click takes the lecturer to the lobby. Problems that block publishing
+  // show here like the export ones do.
+  const host = useMutation({
+    mutationFn: async (q: QuizSummary) => {
+      if (q.status !== "published") await api<QuizDoc>(`/quizzes/${q.id}/publish`, { method: "POST" });
+      return api<GameCreated>("/games", { method: "POST", json: { quizId: q.id } });
+    },
+    onSuccess: (game) => navigate(`/host/${game.pin}`),
+    onError: (e, q) => {
+      if (e instanceof ApiFailure && e.code === "QUIZ_INVALID") {
+        const problems = (e.body as { problems?: QuizProblemDoc[] }).problems ?? [];
+        setNotice({ kind: "hostErrors", title: q.title, problems });
+        void refresh();
       } else fail(e);
     },
   });
@@ -161,6 +180,9 @@ export function QuizList() {
       {notice?.kind === "exportErrors" && (
         <ProblemList title={t("quizzes.exportBlocked", { title: notice.title })} problems={notice.problems} />
       )}
+      {notice?.kind === "hostErrors" && (
+        <ProblemList title={t("quizzes.hostBlocked", { title: notice.title })} problems={notice.problems} />
+      )}
 
       <input
         type="search"
@@ -196,7 +218,16 @@ export function QuizList() {
                   )}
                 </p>
               </div>
-              <div className="flex gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <button
+                  type="button"
+                  disabled={host.isPending}
+                  title={q.status === "published" ? undefined : t("quizzes.hostPublishes")}
+                  className="rounded-lg bg-indigo-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50"
+                  onClick={() => host.mutate(q)}
+                >
+                  {host.isPending && host.variables?.id === q.id ? t("quizzes.hosting") : t("quizzes.host")}
+                </button>
                 <button type="button" className="underline" onClick={() => download.mutate(q)}>
                   {t("quizzes.download")}
                 </button>

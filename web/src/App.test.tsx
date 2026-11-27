@@ -134,3 +134,29 @@ test("signed-in users are warned about quizzes deleted within 3 days", async () 
   fireEvent.click(screen.getByText("Ẩn hôm nay"));
   await waitFor(() => expect(screen.queryByText(/sẽ bị xoá trong/)).toBeNull());
 });
+
+test("a quiz in the list can be hosted live without opening the editor", async () => {
+  const later = new Date(Date.now() + 20 * 86_400_000).toISOString();
+  const calls = mockFetch((url, init) => {
+    if (url === "/api/v1/me") return { status: 200, body: ME };
+    if (url.startsWith("/api/v1/quizzes?"))
+      return {
+        status: 200,
+        body: {
+          items: [{ id: "q1", title: "Địa lý", status: "draft", visibility: "private", questionCount: 3, updatedAt: later, expiresAt: later }],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+        },
+      };
+    if (url === "/api/v1/quizzes/q1/publish" && init?.method === "POST") return { status: 200, body: { id: "q1", status: "published" } };
+    if (url === "/api/v1/games" && init?.method === "POST") return { status: 201, body: { pin: "654321", sessionId: "s1" } };
+  });
+  renderApp("/quizzes");
+  fireEvent.click(await screen.findByRole("button", { name: "Tổ chức trò chơi" }));
+  // A draft is published first, then the lobby opens.
+  await waitFor(() => expect(calls.some((c) => c.url === "/api/v1/games")).toBe(true));
+  const order = calls.map((c) => c.url).filter((u) => u.endsWith("/publish") || u.endsWith("/games"));
+  expect(order).toEqual(["/api/v1/quizzes/q1/publish", "/api/v1/games"]);
+  expect(JSON.parse(String(calls.find((c) => c.url === "/api/v1/games")!.init!.body))).toEqual({ quizId: "q1" });
+});

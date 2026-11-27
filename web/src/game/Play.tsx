@@ -14,6 +14,7 @@ import { AckError, GameSocket, type SocketStatus } from "./socket";
 import { Badge, Big, btn, Chip, Countdown, Logo, Muted, Notice, optionStyle, outline, panel, Podium, Scores, Shape, Stage, timeFraction, Waiting, type Tone } from "./ui";
 import { asTheme, Avatar, AvatarPicker, randomAvatar, ThemeContext, type Theme } from "./avatars";
 import { secondsLeft, useTicker } from "./useCountdown";
+import { asChatMode, ChatBar, type ChatMode } from "./chat";
 
 const DEVICE_KEY = "myquiz.device";
 const AVATAR_KEY = "myquiz.avatar";
@@ -189,6 +190,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
   const [view, setView] = useState<View>({ kind: "connecting" });
   const [me, setMe] = useState<{ nickname: string; avatar: string; score: number; rank: number } | null>(null);
   const [theme, setTheme] = useState<Theme>("cute");
+  const [chatMode, setChatMode] = useState<ChatMode>("open");
   const [status, setStatus] = useState<SocketStatus>("connecting");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const socket = useRef<GameSocket | null>(null);
@@ -200,6 +202,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
   const fromSnapshot = useCallback((s: GameSnapshot) => {
     if (s.me) setMe({ nickname: s.me.nickname, avatar: s.me.avatar, score: s.me.score, rank: s.me.rank });
     setTheme(asTheme(s.theme));
+    setChatMode(asChatMode(s.chat));
     if (s.question) lastQuestion.current = s.question;
     switch (s.state.state) {
       case "lobby":
@@ -240,6 +243,8 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
         return setView({ kind: "ended", reason: p.d.reason });
       case "game:theme":
         return setTheme(asTheme(p.d.theme));
+      case "game:chat":
+        return setChatMode(asChatMode(p.d.mode));
       case "player:kicked":
         storage()?.removeItem(tokenKey(pin));
         socket.current?.close();
@@ -304,6 +309,11 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
   const playing = view.kind === "question" && now >= view.q.startsAt && !view.sent && now < view.q.endsAt;
   const tone: Tone | undefined = view.kind === "result" ? (view.r.correct ? "correct" : view.r.answered ? "wrong" : "missed") : undefined;
   const over = view.kind === "ended" || view.kind === "kicked";
+  // Chat stays out of the way while a player is still answering: it shows
+  // once they answered, and then only emoji until the question ends.
+  const chatShown = !over && view.kind !== "connecting" && (view.kind !== "question" || view.sent);
+  const sendChat = (d: { text?: string; emoji?: string }) =>
+    socket.current ? socket.current.request({ t: "player:chat", d }) : Promise.reject(new AckError("DISCONNECTED"));
   const rightAnswer =
     view.kind === "result" && !view.r.correct
       ? (lastQuestion.current?.options ?? [])
@@ -327,6 +337,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
         ) : undefined
       }
       right={me && !over && <Chip>{t("game.points", { count: me.score })}</Chip>}
+      footer={chatShown && chatMode !== "off" && <ChatBar mode={chatMode} textAllowed={view.kind !== "question"} send={sendChat} />}
     >
       {status === "reconnecting" && <Notice kind="warn">{t("game.reconnecting")}</Notice>}
       {submitError && <Notice kind="error">{t(`game.errors.${submitError}`, { defaultValue: t("errors.INTERNAL") })}</Notice>}

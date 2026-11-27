@@ -22,7 +22,7 @@ pub const THEMES: &[&str] = &["cute", "anime"];
 /// its own character for an id.
 pub const AVATARS: &[&str] = &[
     "bunny", "kitty", "froggy", "ducky", "bear", "fox", "panda", "chick", "piggy", "koala",
-    "mouse", "seal",
+    "mouse", "seal", "owl", "penguin", "lion", "tiger", "sheep", "cow", "hedgehog", "unicorn",
 ];
 
 /// The avatar to show: the one asked for when it is known, otherwise one
@@ -33,6 +33,20 @@ pub fn pick_avatar(asked: Option<&str>, seed: u32) -> String {
         _ => AVATARS[seed as usize % AVATARS.len()].to_string(),
     }
 }
+
+/// Who may chat (players' popups on the host screen), set by the host:
+/// everyone, quick emoji only, or nobody.
+pub const CHAT_MODES: &[&str] = &["open", "emoji", "off"];
+
+/// The quick reactions players can send, by id. The web client draws them
+/// (`web/src/game/chat.ts`) and must list the same ids. Ids rather than raw
+/// emoji keep the host screen to a known, classroom-safe set.
+pub const CHAT_EMOJIS: &[&str] = &[
+    "thumbs", "heart", "laugh", "wow", "party", "fire", "clap", "think",
+];
+
+/// Longest chat text, in characters.
+pub const CHAT_MAX_CHARS: usize = 60;
 
 macro_rules! wire {
     ($($item:item)*) => {
@@ -77,12 +91,16 @@ pub enum ClientMessage {
     HostSkip(HostSkip),
     #[serde(rename = "host:end")]
     HostEnd(Empty),
+    #[serde(rename = "host:chat")]
+    HostChat(HostChat),
     #[serde(rename = "player:join")]
     PlayerJoin(PlayerJoin),
     #[serde(rename = "player:resume")]
     PlayerResume(PlayerResume),
     #[serde(rename = "answer:submit")]
     AnswerSubmit(AnswerSubmit),
+    #[serde(rename = "player:chat")]
+    PlayerChat(PlayerChat),
     #[serde(rename = "time:ping")]
     TimePing(TimePing),
 }
@@ -102,6 +120,8 @@ wire! {
     pub struct HostRejoin { pub player_id: String }
     pub struct HostNext { pub expect: GameState }
     pub struct HostSkip { pub index: usize }
+    /// Who may chat, one of [`CHAT_MODES`]; any time during the game.
+    pub struct HostChat { pub mode: String }
 
     pub struct PlayerJoin {
         pub pin: String,
@@ -113,6 +133,18 @@ wire! {
         pub avatar: Option<String>,
     }
     pub struct PlayerResume { pub pin: String, pub token: String }
+
+    /// A chat popup for the host screen: either a short text (at most
+    /// [`CHAT_MAX_CHARS`], not while a question runs) or one of
+    /// [`CHAT_EMOJIS`].
+    pub struct PlayerChat {
+        #[serde(default)]
+        #[ts(optional)]
+        pub text: Option<String>,
+        #[serde(default)]
+        #[ts(optional)]
+        pub emoji: Option<String>,
+    }
 
     pub struct AnswerSubmit {
         pub index: usize,
@@ -135,6 +167,8 @@ wire! {
         pub locked: bool,
         /// The look the host picked, one of [`THEMES`].
         pub theme: String,
+        /// Who may chat, one of [`CHAT_MODES`].
+        pub chat: String,
         pub players: Vec<LobbyPlayer>,
         /// Set while a question is running.
         pub question: Option<QuestionStart>,
@@ -209,6 +243,16 @@ wire! {
 
     pub struct GameEnded { pub reason: EndReason }
     pub struct GameTheme { pub theme: String }
+    /// The host changed who may chat, one of [`CHAT_MODES`].
+    pub struct GameChat { pub mode: String }
+    /// A player's chat popup, to the host only.
+    pub struct ChatMessage {
+        pub player_id: String,
+        pub nickname: String,
+        pub avatar: String,
+        pub text: Option<String>,
+        pub emoji: Option<String>,
+    }
     /// To the host: someone on a new device asks to continue as this
     /// (offline) player. Sent again on each of their retries.
     pub struct RejoinRequest { pub player_id: String, pub nickname: String, pub avatar: String }
@@ -252,6 +296,10 @@ pub enum ServerPush {
     GameEnded(GameEnded),
     #[serde(rename = "game:theme")]
     GameTheme(GameTheme),
+    #[serde(rename = "game:chat")]
+    GameChat(GameChat),
+    #[serde(rename = "chat:message")]
+    ChatMessage(ChatMessage),
     #[serde(rename = "rejoin:request")]
     RejoinRequest(RejoinRequest),
     #[serde(rename = "error")]
@@ -325,6 +373,26 @@ mod tests {
             f.msg,
             ClientMessage::HostNext(HostNext {
                 expect: GameState::Reveal { index: 0 }
+            })
+        );
+    }
+
+    #[test]
+    fn parses_chat_frames() {
+        let f: Inbound =
+            serde_json::from_str(r#"{"t":"player:chat","id":3,"d":{"emoji":"clap"}}"#).unwrap();
+        assert_eq!(
+            f.msg,
+            ClientMessage::PlayerChat(PlayerChat {
+                text: None,
+                emoji: Some("clap".into())
+            })
+        );
+        let f: Inbound = serde_json::from_str(r#"{"t":"host:chat","d":{"mode":"emoji"}}"#).unwrap();
+        assert_eq!(
+            f.msg,
+            ClientMessage::HostChat(HostChat {
+                mode: "emoji".into()
             })
         );
     }

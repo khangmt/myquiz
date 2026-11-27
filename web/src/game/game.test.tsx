@@ -274,3 +274,68 @@ test("the avatar ids match the server's list", async () => {
   const list = rust.match(/pub const AVATARS: &\[&str\] = &\[([^\]]*)\]/)![1];
   expect([...list.matchAll(/"([a-z]+)"/g)].map((m) => m[1])).toEqual(AVATAR_IDS);
 });
+
+test("the chat emoji ids match the server's list", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { CHAT_EMOJI_IDS, CHAT_MAX_CHARS } = await import("./chat");
+  const rust = readFileSync("../crates/protocol/src/ws.rs", "utf8");
+  const list = rust.match(/pub const CHAT_EMOJIS: &\[&str\] = &\[([^\]]*)\]/)![1];
+  expect([...list.matchAll(/"([a-z]+)"/g)].map((m) => m[1])).toEqual(CHAT_EMOJI_IDS);
+  expect(rust).toContain(`pub const CHAT_MAX_CHARS: usize = ${CHAT_MAX_CHARS};`);
+});
+
+test("the host sees chat as popups and can switch chat to emoji only", async () => {
+  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : undefined));
+  renderApp("/host/123456");
+  const ws = await socket();
+  ws.ack("host:attach", { ...lobby, theme: "cute", chat: "open", reportId: "s-42", players: [{ id: "p1", nickname: "Lan", avatar: "owl" }] });
+  await screen.findByText("123456");
+
+  ws.push("chat:message", { playerId: "p1", nickname: "Lan", avatar: "owl", text: "Chào cô!", emoji: null });
+  expect((await screen.findByTestId("chat-bubble")).textContent).toContain("Chào cô!");
+
+  fireEvent.click(screen.getByRole("radio", { name: "Chỉ emoji" }));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "host:chat", d: { mode: "emoji" } });
+  ws.ack("host:chat", {});
+  ws.push("game:chat", { mode: "emoji" });
+  await waitFor(() => expect(screen.getByRole("radio", { name: "Chỉ emoji" }).getAttribute("aria-checked")).toBe("true"));
+
+  // Hiding clears this screen and keeps new popups away.
+  fireEvent.click(screen.getByText("Ẩn tin nhắn"));
+  expect(screen.queryByTestId("chat-bubble")).toBeNull();
+  ws.push("chat:message", { playerId: "p1", nickname: "Lan", avatar: "owl", text: "Again", emoji: null });
+  expect(screen.queryByTestId("chat-bubble")).toBeNull();
+});
+
+test("a player sends a message from the lobby, and only emoji after answering", async () => {
+  mockFetch((url) => (url.endsWith("/games/pin/123456") ? { status: 200, body: { pin: "123456", title: "Địa lý", locked: false } } : undefined));
+  renderApp("/join?pin=123456");
+  fireEvent.change(await screen.findByLabelText("Biệt danh"), { target: { value: "Lan" } });
+  fireEvent.click(screen.getByText("Vào chơi"));
+  const ws = await socket();
+  ws.ack("player:join", { playerId: "p1", token: "tok-1", snapshot: { ...lobby, chat: "open", me: { playerId: "p1", nickname: "Lan", avatar: "owl", score: 0, rank: 1, answered: false } } });
+
+  fireEvent.change(await screen.findByLabelText("Nhắn gì đó lên màn hình…"), { target: { value: "  Xin chào  " } });
+  fireEvent.click(screen.getByText("Gửi"));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "player:chat", d: { text: "Xin chào" } });
+  ws.ack("player:chat", {});
+  expect(await screen.findByText("Đã gửi!")).toBeTruthy();
+
+  fireEvent.click(screen.getByLabelText("Vỗ tay"));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "player:chat", d: { emoji: "clap" } });
+  ws.ack("player:chat", null, false, "CHAT_SLOW");
+  expect(await screen.findByText("Chậm lại chút nhé")).toBeTruthy();
+
+  // While answering: no chat at all.
+  ws.push("question:start", question());
+  await screen.findByText("Hà Nội");
+  expect(screen.queryByTestId("chat-bar")).toBeNull();
+  fireEvent.click(screen.getByText("Hà Nội"));
+  // Answered: emoji only until the question ends.
+  expect(await screen.findByTestId("chat-bar")).toBeTruthy();
+  expect(screen.queryByLabelText("Nhắn gì đó lên màn hình…")).toBeNull();
+
+  // The host turns chat off.
+  ws.push("game:chat", { mode: "off" });
+  await waitFor(() => expect(screen.queryByTestId("chat-bar")).toBeNull());
+});

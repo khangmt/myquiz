@@ -2,12 +2,14 @@
 import type { AnswerSubmit } from "./AnswerSubmit";
 import type { Empty } from "./Empty";
 import type { HostAttach } from "./HostAttach";
+import type { HostChat } from "./HostChat";
 import type { HostKick } from "./HostKick";
 import type { HostLock } from "./HostLock";
 import type { HostNext } from "./HostNext";
 import type { HostRejoin } from "./HostRejoin";
 import type { HostSkip } from "./HostSkip";
 import type { HostTheme } from "./HostTheme";
+import type { PlayerChat } from "./PlayerChat";
 import type { PlayerJoin } from "./PlayerJoin";
 import type { PlayerResume } from "./PlayerResume";
 import type { TimePing } from "./TimePing";
@@ -15,4 +17,4 @@ import type { TimePing } from "./TimePing";
 /**
  * Everything a client may send.
  */
-export type ClientMessage = { "t": "host:attach", "d": HostAttach } | { "t": "host:lock", "d": HostLock } | { "t": "host:theme", "d": HostTheme } | { "t": "host:kick", "d": HostKick } | { "t": "host:rejoin", "d": HostRejoin } | { "t": "host:start", "d": Empty } | { "t": "host:next", "d": HostNext } | { "t": "host:skip", "d": HostSkip } | { "t": "host:end", "d": Empty } | { "t": "player:join", "d": PlayerJoin } | { "t": "player:resume", "d": PlayerResume } | { "t": "answer:submit", "d": AnswerSubmit } | { "t": "time:ping", "d": TimePing };
+export type ClientMessage = { "t": "host:attach", "d": HostAttach } | { "t": "host:lock", "d": HostLock } | { "t": "host:theme", "d": HostTheme } | { "t": "host:kick", "d": HostKick } | { "t": "host:rejoin", "d": HostRejoin } | { "t": "host:start", "d": Empty } | { "t": "host:next", "d": HostNext } | { "t": "host:skip", "d": HostSkip } | { "t": "host:end", "d": Empty } | { "t": "host:chat", "d": HostChat } | { "t": "player:join", "d": PlayerJoin } | { "t": "player:resume", "d": PlayerResume } | { "t": "answer:submit", "d": AnswerSubmit } | { "t": "player:chat", "d": PlayerChat } | { "t": "time:ping", "d": TimePing };
