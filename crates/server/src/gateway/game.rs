@@ -19,11 +19,18 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::hub::{encode, Delivery, Hub};
-use crate::live::{secrets, JoinRefusal, LiveStore, NewPlayer, PlayerRecord, Transition};
+use crate::live::{secrets, ChatSlot, JoinRefusal, LiveStore, NewPlayer, PlayerRecord, Transition};
 
 /// Lobby and progress pushes are batched to at most one per this interval
 /// per game and server (design section 7).
 const BATCH_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Chat limits (players' popups on the host screen). A player may send one
+/// text every few seconds and an emoji about once a second; the game as a
+/// whole is capped too, so a full class cannot flood the projector.
+pub const CHAT_TEXT_COOLDOWN_MS: u64 = 4_000;
+pub const CHAT_EMOJI_COOLDOWN_MS: u64 = 1_000;
+pub const CHAT_PER_GAME_PER_SEC: u32 = 12;
 
 pub const NICK_MIN: usize = 2;
 pub const NICK_MAX: usize = 20;
@@ -170,6 +177,7 @@ impl GameService {
             state: meta.state,
             locked: meta.locked,
             theme: meta.theme.clone(),
+            chat: meta.chat.clone(),
             players: lobby_list(&players),
             question,
             report_id: for_host.then(|| meta.session.clone()),
@@ -217,6 +225,18 @@ impl GameService {
                     theme: theme.into(),
                 }),
             )
+            .await?;
+        Ok(Ok(()))
+    }
+
+    /// `host:chat`: who may chat, at any point of the game.
+    pub async fn set_chat(&self, pin: &str, mode: &str) -> Result<Result<(), Code>> {
+        if !CHAT_MODES.contains(&mode) {
+            return Ok(Err("INVALID"));
+        }
+        self.store.set_chat(pin, mode).await?;
+        self.hub
+            .to_all(pin, &ServerPush::GameChat(GameChat { mode: mode.into() }))
             .await?;
         Ok(Ok(()))
     }
@@ -478,6 +498,74 @@ impl GameService {
                 Ok(Err(e.code()))
             }
         }
+    }
+
+    /// `player:chat`: a short text or a quick emoji for the host screen.
+    /// Nothing is stored; the host sees it as a popup that fades.
+    pub async fn chat(
+        &self,
+        pin: &str,
+        player_id: &str,
+        msg: &PlayerChat,
+    ) -> Result<Result<(), Code>> {
+        let Some(meta) = self.store.meta(pin).await? else {
+            return Ok(Err("PIN_INVALID"));
+        };
+        if meta.state == GameState::Ended {
+            return Ok(Err("WRONG_STATE"));
+        }
+        let (text, emoji) = match (&msg.text, &msg.emoji) {
+            (Some(_), Some(_)) | (None, None) => return Ok(Err("INVALID")),
+            (None, Some(e)) => {
+                if !CHAT_EMOJIS.contains(&e.as_str()) {
+                    return Ok(Err("INVALID"));
+                }
+                (None, Some(e.clone()))
+            }
+            (Some(t), None) => match clean_chat(t) {
+                Ok(t) => (Some(t), None),
+                Err(c) => return Ok(Err(c)),
+            },
+        };
+        match (meta.chat.as_str(), text.is_some()) {
+            ("off", _) | ("emoji", true) => return Ok(Err("CHAT_OFF")),
+            _ => {}
+        }
+        // Typing during a question would pull eyes off it, on the phone and
+        // on the projector: only emoji then.
+        if text.is_some() && matches!(meta.state, GameState::Question { .. }) {
+            return Ok(Err("CHAT_BUSY"));
+        }
+        let Some(player) = self.store.player(pin, player_id).await? else {
+            return Ok(Err("FORBIDDEN"));
+        };
+        let (kind, cooldown) = if text.is_some() {
+            ("text", CHAT_TEXT_COOLDOWN_MS)
+        } else {
+            ("emoji", CHAT_EMOJI_COOLDOWN_MS)
+        };
+        match self
+            .store
+            .chat_slot(pin, player_id, kind, cooldown, CHAT_PER_GAME_PER_SEC)
+            .await?
+        {
+            ChatSlot::Granted => {}
+            ChatSlot::TooSoon | ChatSlot::GameBusy => return Ok(Err("CHAT_SLOW")),
+        }
+        let avatar = avatar_of(player_id, &player);
+        self.hub
+            .to_host(
+                pin,
+                &ServerPush::ChatMessage(ChatMessage {
+                    player_id: player_id.to_string(),
+                    nickname: player.nickname,
+                    avatar,
+                    text,
+                    emoji,
+                }),
+            )
+            .await?;
+        Ok(Ok(()))
     }
 
     async fn maybe_reveal_early(&self, pin: &str) -> Result<()> {
@@ -787,6 +875,27 @@ fn rows(ranked: &[Ranked<(String, String, String)>]) -> Vec<ScoreRow> {
         .collect()
 }
 
+/// Invisible characters that could hide a word from the filter or flip the
+/// text's direction on screen.
+fn is_hidden(c: char) -> bool {
+    matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}' | '\u{00AD}')
+}
+
+/// A chat text as shown: invisible characters dropped, spaces collapsed,
+/// at most [`CHAT_MAX_CHARS`], and through the nickname word filter.
+pub fn clean_chat(raw: &str) -> Result<String, Code> {
+    let visible: String = raw.chars().filter(|c| !is_hidden(*c)).collect();
+    let text = visible.split_whitespace().collect::<Vec<_>>().join(" ");
+    let len = text.chars().count();
+    if len == 0 || len > CHAT_MAX_CHARS || text.chars().any(char::is_control) {
+        return Err("INVALID");
+    }
+    if myquiz_engine::profanity::is_offensive(&text) {
+        return Err("CHAT_BLOCKED");
+    }
+    Ok(text)
+}
+
 fn refusal_code(r: JoinRefusal) -> Code {
     match r {
         JoinRefusal::PinInvalid => "PIN_INVALID",
@@ -799,4 +908,22 @@ fn refusal_code(r: JoinRefusal) -> Code {
 
 fn parse_uuid(s: &str) -> Result<Uuid> {
     Uuid::parse_str(s).with_context(|| format!("not a uuid: {s}"))
+}
+
+#[cfg(test)]
+mod chat_tests {
+    use super::clean_chat;
+
+    #[test]
+    fn chat_text_is_cleaned_and_filtered() {
+        assert_eq!(clean_chat("  hay   quá!  "), Ok("hay quá!".into()));
+        assert_eq!(clean_chat("   "), Err("INVALID"));
+        assert_eq!(clean_chat(&"a".repeat(61)), Err("INVALID"));
+        assert!(clean_chat(&"ă".repeat(60)).is_ok());
+        assert_eq!(clean_chat("bell\u{7}"), Err("INVALID"));
+        assert_eq!(clean_chat("đm"), Err("CHAT_BLOCKED"));
+        // Zero-width characters cannot hide a word from the filter.
+        assert_eq!(clean_chat("f\u{200B}uck"), Err("CHAT_BLOCKED"));
+        assert_eq!(clean_chat("\u{202E}abc"), Ok("abc".into()));
+    }
 }

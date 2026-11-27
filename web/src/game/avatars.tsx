@@ -18,10 +18,10 @@ export function asTheme(t: string | null | undefined): Theme {
 const INK = "#3b3a36";
 const BLUSH = "#f4a7a8";
 
-type Ears = "long" | "pointy" | "round" | "big" | "bumps" | "tuft" | "floppy" | "none";
+type Ears = "long" | "pointy" | "round" | "big" | "bumps" | "tuft" | "floppy" | "hood" | "mane" | "fluff" | "horns" | "spikes" | "horn" | "none";
 type Snout = "smile" | "beak" | "pig" | "bear" | "koala" | "whiskers";
 
-type Spec = { face: string; bg: string; ears: Ears; earColor?: string; inner?: string; snout: Snout; patches?: boolean };
+type Spec = { face: string; bg: string; ears: Ears; earColor?: string; inner?: string; snout: Snout; patches?: boolean; stripes?: boolean };
 
 const SPECS: Record<string, Spec> = {
   bunny: { face: "#ffffff", bg: "#e3f1d6", ears: "long", inner: BLUSH, snout: "smile" },
@@ -36,6 +36,14 @@ const SPECS: Record<string, Spec> = {
   koala: { face: "#b9bfc4", bg: "#f2eb9f", ears: "big", inner: "#e9ecee", snout: "koala" },
   mouse: { face: "#d8d4cf", bg: "#c9f0e6", ears: "big", inner: BLUSH, snout: "whiskers" },
   seal: { face: "#c9dbe3", bg: "#fbf3d4", ears: "none", snout: "whiskers" },
+  owl: { face: "#d9b48a", bg: "#cfe9f2", ears: "pointy", inner: "#8a6a4a", snout: "beak" },
+  penguin: { face: "#ffffff", bg: "#cfe9f2", ears: "hood", earColor: "#4a5560", snout: "beak" },
+  lion: { face: "#f7d08a", bg: "#fbf3d4", ears: "mane", earColor: "#d98a3d", snout: "bear" },
+  tiger: { face: "#f2a75b", bg: "#e3f1d6", ears: "round", inner: "#fff4e6", snout: "whiskers", stripes: true },
+  sheep: { face: "#fbeee0", bg: "#d5ecc6", ears: "fluff", earColor: "#ffffff", snout: "smile" },
+  cow: { face: "#ffffff", bg: "#fbe0e0", ears: "horns", earColor: "#f2c14e", snout: "pig", patches: false },
+  hedgehog: { face: "#f2dcc0", bg: "#f2eb9f", ears: "spikes", earColor: "#8a6a4a", snout: "bear" },
+  unicorn: { face: "#ffffff", bg: "#e9dcf7", ears: "horn", earColor: "#f2c14e", inner: "#c9b6f2", snout: "smile" },
 };
 
 export const AVATAR_IDS = Object.keys(SPECS);
@@ -93,6 +101,57 @@ function EarShapes({ s }: { s: Spec }) {
       );
     case "tuft":
       return <path d="M50 28 C46 20 48 14 53 14 C51 18 54 22 57 21 C55 25 53 27 50 28 Z" fill={s.face} {...line} />;
+    case "hood":
+      // A dark head with the white face in front of it (penguin).
+      return <circle cx={50} cy={52} r={35} fill={fill} {...line} />;
+    case "mane":
+      return (
+        <>
+          {Array.from({ length: 12 }, (_, i) => {
+            const a = (i / 12) * Math.PI * 2;
+            return <circle key={i} cx={50 + Math.cos(a) * 30} cy={57 + Math.sin(a) * 30} r={10} fill={fill} {...line} />;
+          })}
+          <circle cx={50} cy={57} r={33} fill={fill} />
+        </>
+      );
+    case "fluff":
+      return (
+        <>
+          {[30, 40, 50, 60, 70].map((x, i) => (
+            <circle key={x} cx={x} cy={i % 2 ? 28 : 33} r={10} fill={fill} {...line} />
+          ))}
+          <ellipse cx={22} cy={52} rx={10} ry={6} fill={s.face} {...line} transform="rotate(-20 22 52)" />
+          <ellipse cx={78} cy={52} rx={10} ry={6} fill={s.face} {...line} transform="rotate(20 78 52)" />
+        </>
+      );
+    case "horns":
+      return (
+        <>
+          <path d="M34 34 C30 26 30 20 33 16 C36 22 40 26 42 30 Z" fill={fill} {...line} />
+          <path d="M66 34 C70 26 70 20 67 16 C64 22 60 26 58 30 Z" fill={fill} {...line} />
+          <ellipse cx={20} cy={48} rx={10} ry={6} fill={s.face} {...line} transform="rotate(-15 20 48)" />
+          <ellipse cx={80} cy={48} rx={10} ry={6} fill={s.face} {...line} transform="rotate(15 80 48)" />
+        </>
+      );
+    case "spikes":
+      return (
+        <path
+          d="M18 70 L10 58 L20 52 L12 40 L25 38 L22 24 L35 28 L38 14 L50 23 L62 14 L65 28 L78 24 L75 38 L88 40 L80 52 L90 58 L82 70 Z"
+          fill={fill}
+          {...line}
+        />
+      );
+    case "horn":
+      return (
+        <>
+          <path d="M26 44 L29 20 L46 32 Z" fill={s.face} {...line} />
+          <path d="M74 44 L71 20 L54 32 Z" fill={s.face} {...line} />
+          <path d="M31 36 L31.5 26 L39 31 Z" fill={s.inner} />
+          <path d="M69 36 L68.5 26 L61 31 Z" fill={s.inner} />
+          <path d="M44 31 L50 6 L56 31 Z" fill={fill} {...line} />
+          <path d="M46.5 22 L53.5 19 M45.5 27 L54.5 24" {...line} strokeWidth={1.8} />
+        </>
+      );
     case "floppy":
       return (
         <>
@@ -159,6 +218,14 @@ export function Avatar({ id, size = 40, className = "", theme }: { id?: string |
       <circle cx={50} cy={50} r={47} fill={s.bg} {...line} />
       <EarShapes s={s} />
       <circle cx={50} cy={58} r={29} fill={s.face} {...line} />
+      {s.stripes && <path d="M50 30 L50 38 M41 32 L43 39 M59 32 L57 39 M22 56 L29 57 M78 56 L71 57" {...line} strokeWidth={2.6} />}
+      {s.ears === "horn" && <path d="M36 34 C40 26 50 26 54 31 C50 30 44 32 42 38 Z" fill={s.inner} {...line} strokeWidth={2.2} />}
+      {s.ears === "horns" && (
+        <>
+          <ellipse cx={36} cy={46} rx={8} ry={6} fill={INK} opacity={0.85} />
+          <ellipse cx={66} cy={74} rx={5} ry={3.5} fill={INK} opacity={0.85} />
+        </>
+      )}
       <Face s={s} />
     </svg>
   );
@@ -169,7 +236,7 @@ export function AvatarPicker({ value, onChange, label, theme }: { value: string;
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="mb-2 text-sm font-bold text-ink/70">{label}</legend>
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-5 gap-1.5">
         {AVATAR_IDS.map((id) => (
           <label
             key={id}
@@ -178,7 +245,7 @@ export function AvatarPicker({ value, onChange, label, theme }: { value: string;
             }`}
           >
             <input type="radio" name="avatar" value={id} checked={value === id} onChange={() => onChange(id)} className="sr-only" aria-label={id} />
-            <Avatar id={id} theme={theme} size={56} className={value === id ? "animate-pop" : ""} />
+            <Avatar id={id} theme={theme} size={52} className={value === id ? "animate-pop" : ""} />
           </label>
         ))}
       </div>
@@ -189,7 +256,7 @@ export function AvatarPicker({ value, onChange, label, theme }: { value: string;
 // ---- Anime look ----------------------------------------------------------
 
 type Hair = "bob" | "long" | "twintails" | "ponytail" | "bun" | "spiky" | "messy" | "short";
-type Extra = "bow" | "catears" | "star" | "glasses" | "flower" | "headphones" | "leaf" | "none";
+type Extra = "bow" | "catears" | "star" | "glasses" | "flower" | "headphones" | "leaf" | "scarf" | "crown" | "horn" | "none";
 type Kid = { hair: string; style: Hair; eyes: string; skin: string; bg: string; extra: Extra; extraColor?: string };
 
 const SKIN = ["#fde7d4", "#f6d3b5", "#e9b98f"];
@@ -207,6 +274,14 @@ const KIDS: Record<string, Kid> = {
   koala: { hair: "#5f7d8c", style: "messy", eyes: "#2a7a90", skin: SKIN[2], bg: "#f2eb9f", extra: "glasses" },
   mouse: { hair: "#7cdeca", style: "bob", eyes: "#2a7a90", skin: SKIN[0], bg: "#fbf3d4", extra: "star", extraColor: "#f2c14e" },
   seal: { hair: "#2a7a90", style: "spiky", eyes: "#2a7a90", skin: SKIN[1], bg: "#fbf3d4", extra: "headphones", extraColor: "#d9544c" },
+  owl: { hair: "#8a6a4a", style: "short", eyes: "#d98a3d", skin: SKIN[1], bg: "#cfe9f2", extra: "glasses" },
+  penguin: { hair: "#3b3a36", style: "short", eyes: "#2a7a90", skin: SKIN[0], bg: "#cfe9f2", extra: "scarf", extraColor: "#d9544c" },
+  lion: { hair: "#f2a03d", style: "messy", eyes: "#d98a3d", skin: SKIN[2], bg: "#fbf3d4", extra: "crown", extraColor: "#f2c14e" },
+  tiger: { hair: "#ec8a4b", style: "ponytail", eyes: "#4d8747", skin: SKIN[1], bg: "#e3f1d6", extra: "catears" },
+  sheep: { hair: "#f3efe6", style: "messy", eyes: "#8a6a4a", skin: SKIN[0], bg: "#d5ecc6", extra: "flower", extraColor: "#c4517f" },
+  cow: { hair: "#6b5b4f", style: "twintails", eyes: "#6b5b4f", skin: SKIN[2], bg: "#fbe0e0", extra: "bow", extraColor: "#7cdeca" },
+  hedgehog: { hair: "#8a6a4a", style: "spiky", eyes: "#4d8747", skin: SKIN[0], bg: "#f2eb9f", extra: "scarf", extraColor: "#7bb474" },
+  unicorn: { hair: "#c9b6f2", style: "long", eyes: "#8a5fc4", skin: SKIN[0], bg: "#e9dcf7", extra: "horn", extraColor: "#f2c14e" },
 };
 
 const FACE = "M29 54 C29 74 40 85 50 85 C60 85 71 74 71 54 C71 40 62 33 50 33 C38 33 29 40 29 54 Z";
@@ -308,6 +383,22 @@ function KidExtra({ k }: { k: Kid }) {
           <path d="M22 54 C20 26 80 26 78 54" fill="none" stroke={INK} strokeWidth={4} />
           <rect x={16} y={50} width={10} height={16} rx={5} fill={c} {...line} strokeWidth={2.2} />
           <rect x={74} y={50} width={10} height={16} rx={5} fill={c} {...line} strokeWidth={2.2} />
+        </>
+      );
+    case "scarf":
+      return (
+        <>
+          <path d="M30 84 C40 90 60 90 70 84 L72 94 C60 99 40 99 28 94 Z" fill={c} {...line} strokeWidth={2.4} />
+          <path d="M60 90 L64 100 L71 98 L66 88 Z" fill={c} {...line} strokeWidth={2.2} />
+        </>
+      );
+    case "crown":
+      return <path d="M34 26 L36 12 L43 20 L50 9 L57 20 L64 12 L66 26 Z" fill={c} {...line} strokeWidth={2.2} />;
+    case "horn":
+      return (
+        <>
+          <path d="M45 28 L50 6 L55 28 Z" fill={c} {...line} strokeWidth={2.2} />
+          <path d="M47 20 L53 18 M46 25 L54 23" {...line} strokeWidth={1.6} />
         </>
       );
     case "leaf":

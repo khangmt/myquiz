@@ -46,6 +46,42 @@
   --animate-pop: pop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
   --animate-rise: rise 0.45s ease-out both;
   --animate-grow: grow 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-bubble: bubble 6s ease-out both;
+  --animate-float-up: float-up 3s ease-out both;
+
+  /* Chat popups on the host screen: in, a few seconds still, then away. */
+  @keyframes bubble {
+    0% {
+      opacity: 0;
+      transform: translateY(14px) scale(0.9);
+    }
+    6% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    85% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+  }
+  @keyframes float-up {
+    0% {
+      opacity: 0;
+      transform: translateY(0) scale(0.6);
+    }
+    10% {
+      opacity: 1;
+      transform: translateY(-10px) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-180px) scale(1);
+    }
+  }
 
   @keyframes pop {
     from {

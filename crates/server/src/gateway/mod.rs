@@ -462,6 +462,11 @@ impl Connection {
                 Err(c) => Err(c),
             },
 
+            ClientMessage::PlayerChat(c) => match player {
+                Some((pin, id)) => svc.chat(&pin, &id, &c).await?.map(|_| json!({})),
+                None => Err("FORBIDDEN"),
+            },
+
             ClientMessage::AnswerSubmit(a) => match player {
                 Some((pin, id)) => match svc.answer(&pin, &id, a.index, &a.submission).await? {
                     Ok(()) => Ok(to_value(AnswerAccepted { accepted: true })?),
@@ -491,6 +496,9 @@ impl Connection {
                         svc.next(&pin, n.expect).await?.map(|_| json!({}))
                     }
                     ClientMessage::HostSkip(s) => svc.skip(&pin, s.index).await?.map(|_| json!({})),
+                    ClientMessage::HostChat(c) => {
+                        svc.set_chat(&pin, &c.mode).await?.map(|_| json!({}))
+                    }
                     ClientMessage::HostEnd(_) => {
                         svc.end_game(&pin, EndReason::HostEnded).await?;
                         ok()

@@ -18,6 +18,7 @@ import { asTheme, Avatar, THEMES, ThemeContext, type Theme } from "./avatars";
 import { MusicControl } from "./MusicControl";
 import { secondsLeft, useTicker } from "./useCountdown";
 import type { SessionReport } from "../generated/SessionReport";
+import { asChatMode, ChatModePicker, ChatPopups, useChatPopups, type ChatMode } from "./chat";
 
 /** The lobby's "game name" box (e.g. the class), saved to the report as the
  *  host types, so games of one quiz with different classes stay apart. */
@@ -108,6 +109,14 @@ export function Host() {
   const [reportId, setReportId] = useState<string | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [theme, setTheme] = useState<Theme>("cute");
+  const [chatMode, setChatMode] = useState<ChatMode>("open");
+  // Hides the popups on this screen only; players can still send. For when
+  // the host wants a clean projector for a moment without telling the room.
+  const [chatHidden, setChatHidden] = useState(false);
+  const chat = useChatPopups();
+  const { add: addChat, clear: clearChat } = chat;
+  const hiddenRef = useRef(false);
+  hiddenRef.current = chatHidden;
 
   const fromSnapshot = useCallback((s: GameSnapshot) => {
     state.current = s.state;
@@ -115,6 +124,7 @@ export function Host() {
     setPlayers(s.players);
     setLocked(s.locked);
     setTheme(asTheme(s.theme));
+    setChatMode(asChatMode(s.chat));
     switch (s.state.state) {
       case "lobby":
         return setView({ kind: "lobby" });
@@ -148,6 +158,8 @@ export function Host() {
       case "question:start":
         state.current = { state: "question", index: p.d.index };
         lastQuestion.current = p.d;
+        // A new question starts on a clean screen.
+        clearChat();
         return setView({ kind: "question", q: p.d, answered: 0, connected: 0 });
       case "question:progress":
         return setView((v) => (v.kind === "question" ? { ...v, answered: p.d.answered, connected: p.d.connected } : v));
@@ -168,10 +180,15 @@ export function Host() {
         return setView({ kind: "ended", reason: p.d.reason });
       case "game:theme":
         return setTheme(asTheme(p.d.theme));
+      case "game:chat":
+        return setChatMode(asChatMode(p.d.mode));
+      case "chat:message":
+        if (!hiddenRef.current) addChat(p.d);
+        return;
       default:
         return;
     }
-  }, []);
+  }, [addChat, clearChat]);
 
   useEffect(() => {
     const s = new GameSocket({
@@ -273,6 +290,20 @@ export function Host() {
               )
             )}
             <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+              <ChatModePicker value={chatMode} onChange={(m) => act({ t: "host:chat", d: { mode: m } })} />
+              {chatMode !== "off" && (
+                <button
+                  type="button"
+                  className={btn.ghost}
+                  aria-pressed={chatHidden}
+                  onClick={() => {
+                    setChatHidden(!chatHidden);
+                    chat.clear();
+                  }}
+                >
+                  {chatHidden ? t("game.chat.show") : t("game.chat.hide")}
+                </button>
+              )}
               {view.kind === "lobby" && (
                 <>
                   <ThemePicker value={theme} disabled={busy} onChange={(th) => act({ t: "host:theme", d: { theme: th } })} />
@@ -296,6 +327,10 @@ export function Host() {
         )
       }
     >
+      {live && !chatHidden && chatMode !== "off" && (
+        // Fewer texts at once while a question is up (only emoji arrive then).
+        <ChatPopups bubbles={chat.bubbles} floats={chat.floats} compact={view.kind === "question"} />
+      )}
       {status === "reconnecting" && <Notice kind="warn">{t("game.reconnecting")}</Notice>}
       {actionError && <Notice kind="error">{t(`game.errors.${actionError}`, { defaultValue: t("errors.INTERNAL") })}</Notice>}
 

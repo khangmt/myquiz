@@ -51,7 +51,11 @@
     "download": "Tải zip",
     "duplicate": "Nhân bản",
     "delete": "Xoá",
-    "confirmDelete": "Xoá \"{{title}}\"? Bạn có thể khôi phục trong 30 ngày bằng cách liên hệ quản trị viên."
+    "confirmDelete": "Xoá \"{{title}}\"? Bạn có thể khôi phục trong 30 ngày bằng cách liên hệ quản trị viên.",
+    "host": "Tổ chức trò chơi",
+    "hosting": "Đang mở…",
+    "hostPublishes": "Bản nháp sẽ được xuất bản trước, rồi mở phòng chờ",
+    "hostBlocked": "Chưa thể tổ chức \"{{title}}\": hãy sửa các lỗi sau trước."
   },
   "problems": {
     "question": "câu {{n}}",
@@ -267,6 +271,42 @@
       "label": "Phong cách",
       "cute": "Dễ thương",
       "anime": "Anime"
+    },
+    "chat": {
+      "label": "Trò chuyện",
+      "mode": {
+        "open": "Bật",
+        "emoji": "Chỉ emoji",
+        "off": "Tắt"
+      },
+      "hide": "Ẩn tin nhắn",
+      "show": "Hiện tin nhắn",
+      "react": "Bày tỏ cảm xúc",
+      "placeholder": "Nhắn gì đó lên màn hình…",
+      "send": "Gửi",
+      "emojiOnly": "Hiện chỉ được gửi emoji",
+      "duringQuestion": "Có thể nhắn tin lại sau câu hỏi",
+      "emoji": {
+        "thumbs": "Thích",
+        "heart": "Tim",
+        "laugh": "Cười",
+        "wow": "Ngạc nhiên",
+        "party": "Ăn mừng",
+        "fire": "Cháy",
+        "clap": "Vỗ tay",
+        "think": "Suy nghĩ"
+      },
+      "notes": {
+        "SENT": "Đã gửi!",
+        "CHAT_SLOW": "Chậm lại chút nhé",
+        "RATE_LIMITED": "Chậm lại chút nhé",
+        "CHAT_BLOCKED": "Tin nhắn này không được phép",
+        "CHAT_OFF": "Trò chuyện đang tắt",
+        "CHAT_BUSY": "Có thể nhắn tin lại sau câu hỏi",
+        "INVALID": "Không gửi được",
+        "DISCONNECTED": "Chưa kết nối",
+        "INTERNAL": "Không gửi được"
+      }
     }
   },
   "reports": {

@@ -15,7 +15,11 @@ export type GameSnapshot = { pin: string, state: GameState, locked: boolean,
 /**
  * The look the host picked, one of [`THEMES`].
  */
-theme: string, players: Array<LobbyPlayer>, 
+theme: string, 
+/**
+ * Who may chat, one of [`CHAT_MODES`].
+ */
+chat: string, players: Array<LobbyPlayer>, 
 /**
  * Set while a question is running.
  */

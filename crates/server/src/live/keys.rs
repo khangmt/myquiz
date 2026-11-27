@@ -35,3 +35,11 @@ pub fn online(pin: &str) -> String {
 pub fn login_session(sid: &str) -> String {
     format!("session:{sid}")
 }
+/// A player's chat cooldown, per kind ("text" or "emoji").
+pub fn chat_cooldown(pin: &str, player_id: &str, kind: &str) -> String {
+    format!("game:{pin}:chat:{player_id}:{kind}")
+}
+/// Chat messages in the current second, for the whole game.
+pub fn chat_rate(pin: &str) -> String {
+    format!("game:{pin}:chat:rate")
+}

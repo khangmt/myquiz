@@ -53,7 +53,11 @@
     "download": "Download zip",
     "duplicate": "Duplicate",
     "delete": "Delete",
-    "confirmDelete": "Delete \"{{title}}\"? An administrator can restore it within 30 days."
+    "confirmDelete": "Delete \"{{title}}\"? An administrator can restore it within 30 days.",
+    "host": "Host live",
+    "hosting": "Starting…",
+    "hostPublishes": "Publishes this draft first, then opens the lobby",
+    "hostBlocked": "\"{{title}}\" can't be hosted yet: fix these first."
   },
   "problems": {
     "question": "question {{n}}",
@@ -272,6 +276,42 @@
       "label": "Style",
       "cute": "Cute",
       "anime": "Anime"
+    },
+    "chat": {
+      "label": "Chat",
+      "mode": {
+        "open": "On",
+        "emoji": "Emoji only",
+        "off": "Off"
+      },
+      "hide": "Hide popups",
+      "show": "Show popups",
+      "react": "Quick reactions",
+      "placeholder": "Say something to the room…",
+      "send": "Send",
+      "emojiOnly": "The host allows emoji only right now",
+      "duringQuestion": "Messages open again after the question",
+      "emoji": {
+        "thumbs": "Thumbs up",
+        "heart": "Heart",
+        "laugh": "Laugh",
+        "wow": "Wow",
+        "party": "Party",
+        "fire": "Fire",
+        "clap": "Clap",
+        "think": "Thinking"
+      },
+      "notes": {
+        "SENT": "Sent!",
+        "CHAT_SLOW": "Slow down a little",
+        "RATE_LIMITED": "Slow down a little",
+        "CHAT_BLOCKED": "That message isn't allowed",
+        "CHAT_OFF": "Chat is off",
+        "CHAT_BUSY": "Messages open again after the question",
+        "INVALID": "Couldn't send that",
+        "DISCONNECTED": "Not connected",
+        "INTERNAL": "Couldn't send that"
+      }
     }
   },
   "reports": {

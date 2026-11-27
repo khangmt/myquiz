@@ -762,3 +762,100 @@ async fn avatars_and_theme() {
     let snap = host.ok("host:attach", json!({ "pin": pin })).await;
     assert_eq!(snap["theme"], "anime");
 }
+
+#[tokio::test]
+async fn chat_popups_limits_and_host_switch() {
+    let env = env_or_skip!();
+    let (pin, sid, _) = seed_game(&env).await;
+    let mut host = Bot::connect(&env.addr, Some(&sid)).await;
+    let snap = host.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["chat"], "open");
+    let mut a = Bot::connect(&env.addr, None).await;
+    a.ok(
+        "player:join",
+        json!({ "pin": pin, "nickname": "Ana", "deviceId": "dev-a", "avatar": "owl" }),
+    )
+    .await;
+
+    // A text reaches the host, cleaned, with who sent it.
+    a.ok("player:chat", json!({ "text": "  Chào   cô! " }))
+        .await;
+    let m = host.push("chat:message").await;
+    assert_eq!(m["text"], "Chào cô!");
+    assert_eq!(m["nickname"], "Ana");
+    assert_eq!(m["avatar"], "owl");
+    assert!(m["emoji"].is_null());
+
+    // One text every few seconds; emoji have their own, shorter cooldown.
+    assert_eq!(
+        a.req("player:chat", json!({ "text": "again" })).await["code"],
+        "CHAT_SLOW"
+    );
+    a.ok("player:chat", json!({ "emoji": "clap" })).await;
+    assert_eq!(host.push("chat:message").await["emoji"], "clap");
+    assert_eq!(
+        a.req("player:chat", json!({ "emoji": "clap" })).await["code"],
+        "CHAT_SLOW"
+    );
+
+    // Unknown emoji, both or neither, too long, and the word filter.
+    for bad in [
+        json!({ "emoji": "<img>" }),
+        json!({ "text": "hi", "emoji": "clap" }),
+        json!({}),
+        json!({ "text": "x".repeat(61) }),
+    ] {
+        assert_eq!(a.req("player:chat", bad).await["code"], "INVALID");
+    }
+    assert_eq!(
+        a.req("player:chat", json!({ "text": "vcl" })).await["code"],
+        "CHAT_BLOCKED"
+    );
+
+    // Only players chat, and only the host switches it. (A pause first:
+    // the socket's own frame limit is 10 a second.)
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    assert_eq!(
+        host.req("player:chat", json!({ "emoji": "clap" })).await["code"],
+        "FORBIDDEN"
+    );
+    assert_eq!(
+        a.req("host:chat", json!({ "mode": "off" })).await["code"],
+        "FORBIDDEN"
+    );
+    assert_eq!(
+        host.req("host:chat", json!({ "mode": "loud" })).await["code"],
+        "INVALID"
+    );
+
+    // Emoji only: texts are refused, and everyone hears the switch.
+    host.ok("host:chat", json!({ "mode": "emoji" })).await;
+    assert_eq!(a.push("game:chat").await["mode"], "emoji");
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    a.ok("player:chat", json!({ "emoji": "heart" })).await;
+    tokio::time::sleep(Duration::from_millis(3000)).await;
+    assert_eq!(
+        a.req("player:chat", json!({ "text": "hello" })).await["code"],
+        "CHAT_OFF"
+    );
+
+    // Off: nothing goes through; a reconnecting screen sees the mode.
+    host.ok("host:chat", json!({ "mode": "off" })).await;
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+    assert_eq!(
+        a.req("player:chat", json!({ "emoji": "heart" })).await["code"],
+        "CHAT_OFF"
+    );
+    let snap = host.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["chat"], "off");
+
+    // While a question runs, emoji only, even with chat open.
+    host.ok("host:chat", json!({ "mode": "open" })).await;
+    host.ok("host:start", json!({})).await;
+    a.push("question:start").await;
+    assert_eq!(
+        a.req("player:chat", json!({ "text": "help" })).await["code"],
+        "CHAT_BUSY"
+    );
+    a.ok("player:chat", json!({ "emoji": "think" })).await;
+}
