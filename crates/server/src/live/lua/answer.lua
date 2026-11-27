@@ -3,14 +3,17 @@
 -- returns OK, so an acknowledged answer is never lost (NFR-06).
 -- KEYS[1] game:<pin>  KEYS[2] game:<pin>:ans:<n>
 -- ARGV[1] n  ARGV[2] player id  ARGV[3] submission JSON
+-- ARGV[4] grace ms: a tap made just before the deadline still counts when
+-- it reaches the server a moment after it (phone and Wi-Fi latency).
 -- Returns {'OK', responseMs, answeredCount} or {refusal code}.
 local g = redis.call('HMGET', KEYS[1], 'state', 'index', 'startsAt', 'endsAt')
 if g[1] ~= 'question' or g[2] ~= ARGV[1] then return {'WRONG_STATE'} end
 local now = now_ms()
 local starts = tonumber(g[3])
 if now < starts then return {'EARLY'} end
-if now >= tonumber(g[4]) then return {'LATE'} end
-local rt = now - starts
+local ends = tonumber(g[4])
+if now >= ends + tonumber(ARGV[4]) then return {'LATE'} end
+local rt = math.min(now, ends) - starts
 -- Splice the submission in as is: a cjson round trip would turn an empty
 -- JSON array into an object. ARGV[3] is produced by serde_json, so it is valid.
 local stored = '{"r":' .. rt .. ',"s":' .. ARGV[3] .. '}'

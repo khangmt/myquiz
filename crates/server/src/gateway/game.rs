@@ -19,7 +19,9 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::hub::{encode, Delivery, Hub};
-use crate::live::{secrets, JoinRefusal, LiveStore, NewPlayer, PlayerRecord, Transition};
+use crate::live::{
+    secrets, GameMeta, JoinRefusal, Joined, LiveStore, NewPlayer, PlayerRecord, Transition,
+};
 
 /// Lobby and progress pushes are batched to at most one per this interval
 /// per game and server (design section 7).
@@ -247,6 +249,14 @@ impl GameService {
         Ok(Ok(()))
     }
 
+    /// `host:rejoin`: the host lets a returning player's new device in.
+    pub async fn allow_rejoin(&self, pin: &str, player_id: &str) -> Result<Result<(), Code>> {
+        if !self.store.allow_rejoin(pin, player_id).await? {
+            return Ok(Err("NOT_FOUND"));
+        }
+        Ok(Ok(()))
+    }
+
     pub async fn start(&self, pin: &str) -> Result<Result<(), Code>> {
         let r = self.store.command(pin, Command::Start).await?;
         self.after_command(pin, r).await
@@ -317,6 +327,11 @@ impl GameService {
                     .await?;
             }
             GameState::Podium => {
+                // Save the results now: many hosts close the tab on the
+                // podium without pressing Finish, and the report must not
+                // stay "running" for ever.
+                let meta = self.store.meta(pin).await?.context("no such game")?;
+                self.save_results(pin, &meta).await?;
                 let players = self.store.players(pin).await?;
                 let top = rows(podium(&ranked(&players)));
                 self.hub
@@ -383,7 +398,32 @@ impl GameService {
             )
             .await?;
         let join_order = match joined {
-            Ok(o) => o,
+            Ok(Joined::New(o)) => o,
+            Ok(Joined::Reclaimed { player_id }) => {
+                tracing::info!(pin = req.pin, player_id, "player took their name back");
+                self.schedule_lobby(&req.pin);
+                return Ok(Ok(PlayerJoined {
+                    snapshot: self.snapshot(&req.pin, Some(&player_id)).await?,
+                    player_id,
+                    token,
+                }));
+            }
+            Err(JoinRefusal::RejoinWait { player_id }) => {
+                let players = self.store.players(&req.pin).await?;
+                if let Some((id, p)) = players.iter().find(|(id, _)| *id == player_id) {
+                    self.hub
+                        .to_host(
+                            &req.pin,
+                            &ServerPush::RejoinRequest(RejoinRequest {
+                                player_id: id.clone(),
+                                nickname: p.nickname.clone(),
+                                avatar: avatar_of(id, p),
+                            }),
+                        )
+                        .await?;
+                }
+                return Ok(Err("REJOIN_WAIT"));
+            }
             Err(r) => return Ok(Err(refusal_code(r))),
         };
 
@@ -458,10 +498,9 @@ impl GameService {
             .submit_answer(pin, index, player_id, submission)
             .await?
         {
-            Ok(acc) => {
+            Ok(_) => {
                 self.schedule_progress(pin);
-                let connected = self.store.connected(pin).await?;
-                if connected > 0 && acc.answered >= connected {
+                if self.store.all_connected_answered(pin, index).await? {
                     // Reveal in the background so this player's ack is not delayed.
                     let this = self.clone();
                     let pin = pin.to_string();
@@ -485,8 +524,7 @@ impl GameService {
             return Ok(());
         };
         if let GameState::Question { index } = meta.state {
-            let connected = self.store.connected(pin).await?;
-            if connected > 0 && meta.answered >= connected {
+            if self.store.all_connected_answered(pin, index).await? {
                 self.finish_question(pin, index).await?;
             }
         }
@@ -616,6 +654,55 @@ impl GameService {
         if !self.store.finish(pin).await? {
             return Ok(());
         }
+        self.save_results(pin, &meta).await?;
+
+        self.hub
+            .to_all(pin, &ServerPush::GameEnded(GameEnded { reason }))
+            .await?;
+        self.forget(pin);
+        Ok(())
+    }
+
+    /// Ends games created more than `hours` ago that never finished.
+    /// Returns how many it ended.
+    pub async fn end_stale_games(&self, hours: i32) -> Result<u32> {
+        let rows: Vec<(Uuid, Option<String>)> = sqlx::query_as(
+            "SELECT id, pin FROM game_sessions \
+             WHERE status <> 'ended' AND created_at < now() - make_interval(hours => $1) \
+             LIMIT 100",
+        )
+        .bind(hours)
+        .fetch_all(&self.db)
+        .await?;
+        let mut ended = 0;
+        for (session, pin) in rows {
+            let pin = pin.map(|p| p.trim().to_string());
+            let live =
+                match &pin {
+                    Some(pin) => self.store.meta(pin).await?.filter(|m| {
+                        m.session == session.to_string() && m.state != GameState::Ended
+                    }),
+                    None => None,
+                };
+            match (pin, live) {
+                (Some(pin), Some(_)) => {
+                    // Someone is still on it: leave it alone.
+                    if self.store.connected(&pin).await? > 0 {
+                        continue;
+                    }
+                    self.end_game(&pin, EndReason::HostTimeout).await?;
+                }
+                _ => close_session(&self.db, session).await?,
+            }
+            ended += 1;
+        }
+        Ok(ended)
+    }
+
+    /// Writes final scores and ranks and marks the session ended in
+    /// PostgreSQL. Runs when the podium shows and again when the game ends;
+    /// writing the same results twice is harmless.
+    async fn save_results(&self, pin: &str, meta: &GameMeta) -> Result<()> {
         let players = self.store.players(pin).await?;
         let ranked = ranked(&players);
         let mut tx = self.db.begin().await?;
@@ -637,7 +724,7 @@ impl GameService {
             .await?;
         }
         sqlx::query(
-            "UPDATE game_sessions SET status = 'ended', ended_at = now(), pin = NULL, \
+            "UPDATE game_sessions SET status = 'ended', ended_at = COALESCE(ended_at, now()), pin = NULL, \
              player_count = $2 WHERE id = $1",
         )
         .bind(parse_uuid(&meta.session)?)
@@ -653,11 +740,6 @@ impl GameService {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
-
-        self.hub
-            .to_all(pin, &ServerPush::GameEnded(GameEnded { reason }))
-            .await?;
-        self.forget(pin);
         Ok(())
     }
 
@@ -794,7 +876,34 @@ fn refusal_code(r: JoinRefusal) -> Code {
         JoinRefusal::Kicked => "KICKED",
         JoinRefusal::Full => "FULL",
         JoinRefusal::NickTaken => "NICK_TAKEN",
+        JoinRefusal::RejoinWait { .. } => "REJOIN_WAIT",
     }
+}
+
+/// Marks a session ended whose live state is gone: totals from its saved
+/// answers; the report ranks by them.
+async fn close_session(db: &PgPool, session: Uuid) -> Result<()> {
+    let mut tx = db.begin().await?;
+    sqlx::query(
+        "UPDATE session_players p SET final_score = \
+           (SELECT COALESCE(sum(a.points), 0) FROM answers a WHERE a.player_id = p.id) \
+         WHERE p.session_id = $1 AND p.final_score IS NULL",
+    )
+    .bind(session)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "UPDATE game_sessions SET status = 'ended', ended_at = COALESCE(ended_at, now()), \
+           pin = NULL, \
+           player_count = (SELECT count(*) FROM session_players \
+                           WHERE session_id = $1 AND NOT kicked) \
+         WHERE id = $1 AND status <> 'ended'",
+    )
+    .bind(session)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 fn parse_uuid(s: &str) -> Result<Uuid> {

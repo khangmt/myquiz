@@ -92,13 +92,14 @@ async fn create_join_and_lobby_rules() {
     assert_eq!(s.quiz(&pin).await.unwrap().unwrap(), quiz());
 
     let an = player("An", "dev-an");
-    assert_eq!(s.join(&pin, "p-an", &an).await.unwrap(), Ok(0));
+    assert_eq!(s.join(&pin, "p-an", &an).await.unwrap(), Ok(Joined::New(0)));
     assert_eq!(
         s.join(&pin, "p-binh", &player("Bình", "dev-b"))
             .await
             .unwrap(),
-        Ok(1)
+        Ok(Joined::New(1))
     );
+    s.set_online(&pin, "p-an", 1).await.unwrap();
     assert_eq!(
         s.join(&pin, "p-x", &player("  an ", "dev-x"))
             .await
@@ -106,6 +107,7 @@ async fn create_join_and_lobby_rules() {
         Err(JoinRefusal::NickTaken),
         "nicknames are unique ignoring case and spaces"
     );
+    s.set_online(&pin, "p-an", -1).await.unwrap();
     assert_eq!(
         s.player_for_token(&pin, &an.token_hash)
             .await
@@ -131,7 +133,7 @@ async fn create_join_and_lobby_rules() {
         s.join(&pin, "p-chi", &player("An", "dev-chi"))
             .await
             .unwrap(),
-        Ok(2)
+        Ok(Joined::New(2))
     );
 
     s.set_locked(&pin, true).await.unwrap();
@@ -367,4 +369,147 @@ async fn pins_are_unique_among_active_games() {
     for pin in &pins {
         s.finish(pin).await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn returning_players_take_their_name_back() {
+    let (s, _) = live!();
+    let pin = s
+        .create_game("sess-rejoin", "host-r", &quiz())
+        .await
+        .unwrap();
+    let first = player("Khánh", "dev-1");
+    assert_eq!(
+        s.join(&pin, "p-k", &first).await.unwrap(),
+        Ok(Joined::New(0))
+    );
+
+    // Online: the name is taken, whoever asks.
+    s.set_online(&pin, "p-k", 1).await.unwrap();
+    assert_eq!(
+        s.join(&pin, "x", &player("khánh", "dev-1")).await.unwrap(),
+        Err(JoinRefusal::NickTaken)
+    );
+    s.set_online(&pin, "p-k", -1).await.unwrap();
+
+    // Offline, same device (storage lost): taken back, even when locked,
+    // with a new token and the old one revoked.
+    s.set_locked(&pin, true).await.unwrap();
+    let again = player("Khánh", "dev-1");
+    assert_eq!(
+        s.join(&pin, "x", &again).await.unwrap(),
+        Ok(Joined::Reclaimed {
+            player_id: "p-k".into()
+        })
+    );
+    assert_eq!(
+        s.player_for_token(&pin, &again.token_hash)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some("p-k")
+    );
+    assert_eq!(
+        s.player_for_token(&pin, &first.token_hash).await.unwrap(),
+        None
+    );
+
+    // Another device must wait for the host.
+    let other = player("Khánh", "dev-2");
+    assert_eq!(
+        s.join(&pin, "y", &other).await.unwrap(),
+        Err(JoinRefusal::RejoinWait {
+            player_id: "p-k".into()
+        })
+    );
+    assert!(!s.allow_rejoin(&pin, "nobody").await.unwrap());
+    assert!(s.allow_rejoin(&pin, "p-k").await.unwrap());
+    // A third device is not let in by that approval.
+    assert!(matches!(
+        s.join(&pin, "z", &player("Khánh", "dev-3")).await.unwrap(),
+        Err(JoinRefusal::RejoinWait { .. })
+    ));
+    assert_eq!(
+        s.join(&pin, "y", &player("Khánh", "dev-2")).await.unwrap(),
+        Ok(Joined::Reclaimed {
+            player_id: "p-k".into()
+        })
+    );
+    // The record follows the new device; still one player.
+    let players = s.players(&pin).await.unwrap();
+    assert_eq!(players.len(), 1);
+    assert_eq!(players[0].1.device_id, "dev-2");
+
+    // New names are still refused while locked.
+    assert_eq!(
+        s.join(&pin, "n", &player("New", "dev-9")).await.unwrap(),
+        Err(JoinRefusal::Locked)
+    );
+    s.finish(&pin).await.unwrap();
+}
+
+#[tokio::test]
+async fn answers_get_a_grace_period_and_reveal_waits_for_the_room() {
+    let (s, pool) = live!();
+    let pin = s
+        .create_game("sess-grace", "host-g", &quiz())
+        .await
+        .unwrap();
+    for id in ["a", "b", "c"] {
+        s.join(&pin, id, &player(id, id)).await.unwrap().unwrap();
+        s.set_online(&pin, id, 1).await.unwrap();
+    }
+    s.command(&pin, Command::Start).await.unwrap().unwrap();
+    // The sweep is scheduled past the deadline by the grace period.
+    let meta = s.meta(&pin).await.unwrap().unwrap();
+    let due: f64 = pool.zscore(keys::DEADLINES, &pin).await.unwrap();
+    assert_eq!(due as u64, meta.ends_at_ms + ANSWER_GRACE_MS);
+
+    // A moment after the deadline still counts, charged the full time.
+    let now = s.now_ms().await.unwrap();
+    let _: () = pool
+        .hset(
+            keys::game(&pin),
+            [
+                ("startsAt", (now - 20_100).to_string()),
+                ("endsAt", (now - 100).to_string()),
+            ],
+        )
+        .await
+        .unwrap();
+    let ok = s
+        .submit_answer(&pin, 0, "a", &pick(&[1]))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(ok.response_ms, 20_000);
+
+    // "b" answers and drops off: "c" is still in the room and has not.
+    s.submit_answer(&pin, 0, "b", &pick(&[1]))
+        .await
+        .unwrap()
+        .unwrap();
+    s.set_online(&pin, "b", -1).await.unwrap();
+    assert!(!s.all_connected_answered(&pin, 0).await.unwrap());
+    s.submit_answer(&pin, 0, "c", &pick(&[2]))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(s.all_connected_answered(&pin, 0).await.unwrap());
+
+    // Past the grace period: late.
+    let now = s.now_ms().await.unwrap();
+    let _: () = pool
+        .hset(
+            keys::game(&pin),
+            ("endsAt", (now - ANSWER_GRACE_MS - 10).to_string()),
+        )
+        .await
+        .unwrap();
+    s.join(&pin, "d", &player("d", "d")).await.unwrap().unwrap();
+    assert_eq!(
+        s.submit_answer(&pin, 0, "d", &pick(&[1])).await.unwrap(),
+        Err(SubmitError::Late)
+    );
+    s.finish(&pin).await.unwrap();
 }

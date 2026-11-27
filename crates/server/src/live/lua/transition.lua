@@ -5,6 +5,8 @@
 -- ARGV[1] pin  ARGV[2] from state  ARGV[3] from index ('' if none)
 -- ARGV[4] to state  ARGV[5] to index ('' if none)
 -- ARGV[6] countdown ms before options show  ARGV[7] time limit ms
+-- ARGV[8] answer grace ms: the deadline sweep waits this long past the end
+-- so late-arriving answers (see answer.lua) are in before the reveal.
 -- Returns {1, startsAt, endsAt} on success, {0, state, index} if stale.
 local cur = redis.call('HMGET', KEYS[1], 'state', 'index')
 if not cur[1] then return {0, '', ''} end
@@ -16,7 +18,7 @@ if ARGV[4] == 'question' then
   local starts = now_ms() + tonumber(ARGV[6])
   local ends = starts + tonumber(ARGV[7])
   redis.call('HSET', KEYS[1], 'startsAt', starts, 'endsAt', ends, 'answered', 0)
-  redis.call('ZADD', KEYS[2], ends, ARGV[1])
+  redis.call('ZADD', KEYS[2], ends + tonumber(ARGV[8]), ARGV[1])
   return {1, starts, ends}
 end
 redis.call('ZREM', KEYS[2], ARGV[1])

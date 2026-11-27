@@ -112,6 +112,36 @@ test("a taken nickname sends the player back to choose another", async () => {
   expect(await screen.findByLabelText("Biệt danh")).toBeTruthy();
 });
 
+test("a returning player on a new phone waits for the host, then continues", async () => {
+  mockFetch((url) => (url.endsWith("/games/pin/123456") ? { status: 200, body: { pin: "123456", title: "Địa lý", locked: true } } : undefined));
+  renderApp("/join?pin=123456");
+  // Locked: the name form still shows, for players already in the game.
+  expect(await screen.findByText(/Phòng chờ đã khóa/)).toBeTruthy();
+  fireEvent.change(await screen.findByLabelText("Biệt danh"), { target: { value: "Lan" } });
+  fireEvent.click(screen.getByText("Vào chơi"));
+  const ws = await socket();
+  ws.ack("player:join", null, false, "REJOIN_WAIT");
+  expect(await screen.findByText("Tên này đã có trong trò chơi")).toBeTruthy();
+  // It asks again by itself until the host says yes.
+  await waitFor(() => expect(ws.sent.filter((m) => m.t === "player:join").length).toBe(2), { timeout: 4000 });
+  ws.ack("player:join", { playerId: "p1", token: "tok-2", snapshot: { ...lobby, me: { playerId: "p1", nickname: "Lan", score: 900, rank: 1, answered: false } } });
+  expect(await screen.findByText("Bạn đã vào phòng!")).toBeTruthy();
+  expect(localStorage.getItem("myquiz.player.123456")).toBe("tok-2");
+});
+
+test("the host lets a returning player back in", async () => {
+  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : url.endsWith("/config") ? { status: 200, body: { joinUrl: null } } : undefined));
+  renderApp("/host/123456");
+  const ws = await socket();
+  ws.ack("host:attach", { ...lobby, players: [{ id: "p1", nickname: "Lan", avatar: "bunny" }] });
+  ws.push("rejoin:request", { playerId: "p1", nickname: "Lan", avatar: "bunny" });
+  ws.push("rejoin:request", { playerId: "p1", nickname: "Lan", avatar: "bunny" });
+  expect(await screen.findAllByText("Lan muốn vào lại từ thiết bị mới.")).toHaveLength(1);
+  fireEvent.click(screen.getByText("Cho vào"));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "host:rejoin", d: { playerId: "p1" } });
+  expect(screen.queryByText("Lan muốn vào lại từ thiết bị mới.")).toBeNull();
+});
+
 test("a wrong PIN is explained", async () => {
   mockFetch(() => undefined);
   renderApp("/join?pin=999999");
