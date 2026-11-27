@@ -81,6 +81,10 @@ pub enum ClientMessage {
     HostTheme(HostTheme),
     #[serde(rename = "host:kick")]
     HostKick(HostKick),
+    #[serde(rename = "host:ban")]
+    HostBan(HostBan),
+    #[serde(rename = "host:mute")]
+    HostMute(HostMute),
     #[serde(rename = "host:rejoin")]
     HostRejoin(HostRejoin),
     #[serde(rename = "host:start")]
@@ -115,7 +119,13 @@ wire! {
     pub struct HostLock { pub locked: bool }
     /// The game's look, one of [`THEMES`]; only while in the lobby.
     pub struct HostTheme { pub theme: String }
+    /// Removes a player. Their phone may join again under another name.
     pub struct HostKick { pub player_id: String }
+    /// Removes a player and blocks their device (and signed-in account)
+    /// from this game.
+    pub struct HostBan { pub player_id: String }
+    /// Stops (or, with `muted: false`, lets again) a player's chat.
+    pub struct HostMute { pub player_id: String, pub muted: bool }
     /// Lets a player back in under their name from a new device.
     pub struct HostRejoin { pub player_id: String }
     pub struct HostNext { pub expect: GameState }
@@ -197,11 +207,21 @@ wire! {
         pub rank: u32,
         /// Whether this player already answered the running question.
         pub answered: bool,
+        /// The host muted this player's chat.
+        #[serde(default)]
+        pub muted: bool,
     }
 
     // ---- server pushes ----
 
-    pub struct LobbyPlayer { pub id: String, pub nickname: String, pub avatar: String }
+    pub struct LobbyPlayer {
+        pub id: String,
+        pub nickname: String,
+        pub avatar: String,
+        /// The host muted this player's chat.
+        #[serde(default)]
+        pub muted: bool,
+    }
     pub struct LobbyUpdate { pub players: Vec<LobbyPlayer>, pub count: usize, pub locked: bool }
     pub struct LobbyJoined { pub nickname: String, pub player_count: usize }
 
@@ -257,6 +277,13 @@ wire! {
     /// (offline) player. Sent again on each of their retries.
     pub struct RejoinRequest { pub player_id: String, pub nickname: String, pub avatar: String }
     pub struct ErrorPush { pub code: String }
+    /// To a player the host removed. `banned`: this device may not rejoin.
+    pub struct PlayerKicked {
+        #[serde(default)]
+        pub banned: bool,
+    }
+    /// To a player: the host muted or unmuted their chat.
+    pub struct PlayerMuted { pub muted: bool }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -279,7 +306,9 @@ pub enum ServerPush {
     #[serde(rename = "lobby:joined")]
     LobbyJoined(LobbyJoined),
     #[serde(rename = "player:kicked")]
-    PlayerKicked(Empty),
+    PlayerKicked(PlayerKicked),
+    #[serde(rename = "player:muted")]
+    PlayerMuted(PlayerMuted),
     #[serde(rename = "question:start")]
     QuestionStart(QuestionStart),
     #[serde(rename = "question:progress")]

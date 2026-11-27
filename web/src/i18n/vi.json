@@ -245,7 +245,9 @@
       "DISCONNECTED": "Mất kết nối, hãy thử lại.",
       "TIMEOUT": "Máy chủ không phản hồi, hãy thử lại.",
       "LOCKED_REJOIN": "Phòng chờ đã khóa. Chỉ người chơi đã có trong trò chơi mới vào lại được, với đúng tên cũ.",
-      "REJOIN_WAIT": "Đang chờ người tổ chức cho bạn vào lại."
+      "REJOIN_WAIT": "Đang chờ người tổ chức cho bạn vào lại.",
+      "BANNED": "Chủ phòng đã chặn thiết bị này khỏi trò chơi.",
+      "REMOVED": "Chủ phòng đã mời bạn ra. Bạn có thể vào lại bằng tên khác."
     },
     "qr": "Mã QR để vào trò chơi",
     "cancel": "Huỷ",
@@ -307,8 +309,10 @@
         "CHAT_BUSY": "Có thể nhắn tin lại sau câu hỏi",
         "INVALID": "Không gửi được",
         "DISCONNECTED": "Chưa kết nối",
-        "INTERNAL": "Không gửi được"
-      }
+        "INTERNAL": "Không gửi được",
+        "MUTED": "Chủ phòng đã tắt chat của bạn"
+      },
+      "muted": "Chủ phòng đã tắt chat của bạn"
     },
     "rejoin": {
       "waitTitle": "Tên này đã có trong trò chơi",
@@ -317,6 +321,24 @@
       "request": "{{name}} muốn vào lại từ thiết bị mới.",
       "allow": "Cho vào",
       "ignore": "Bỏ qua"
+    },
+    "players": {
+      "title": "Quản lý người chơi",
+      "menuFor": "Tuỳ chọn cho {{name}}",
+      "mute": "Tắt chat",
+      "unmute": "Bật chat",
+      "muteName": "Tắt chat của {{name}}",
+      "unmuteName": "Bật chat cho {{name}}",
+      "muted": "Đã tắt chat",
+      "remove": "Mời ra",
+      "removeHint": "Người chơi có thể vào lại bằng tên khác",
+      "ban": "Chặn",
+      "banName": "Chặn {{name}}",
+      "banHint": "Mời ra và chặn thiết bị này khỏi trò chơi",
+      "banConfirm": "Chặn {{name}}? Thiết bị này sẽ không vào lại trò chơi được.",
+      "search": "Tìm người chơi",
+      "none": "Không có người chơi",
+      "close": "Đóng"
     }
   },
   "reports": {

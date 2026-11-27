@@ -88,7 +88,7 @@ export function Play() {
         onLeave={(code) => {
           storage()?.removeItem(tokenKey(pin));
           setError(code);
-          setStage({ kind: code === "NICK_TAKEN" || code === "NICK_INVALID" ? "checking" : "pin" });
+          setStage({ kind: code === "NICK_TAKEN" || code === "NICK_INVALID" || code === "REMOVED" ? "checking" : "pin" });
         }}
       />
     );
@@ -176,14 +176,15 @@ type View =
   | { kind: "leaderboard"; top: ScoreRow[] }
   | { kind: "podium"; top: ScoreRow[] }
   | { kind: "ended"; reason: string }
-  | { kind: "kicked" }
+  /** Banned: this phone cannot come back to this game. */
+  | { kind: "banned" }
   /** The name belongs to an offline player; waiting for the host's OK. */
   | { kind: "rejoinWait" };
 
 const REJOIN_RETRY_MS = 3000;
 
 /** Leave codes send the player back to the PIN or nickname screen. */
-const FATAL = new Set(["PIN_INVALID", "LOCKED", "KICKED", "FULL", "NICK_TAKEN", "NICK_INVALID", "TOKEN_INVALID", "ALREADY_JOINED"]);
+const FATAL = new Set(["PIN_INVALID", "LOCKED", "KICKED", "BANNED", "FULL", "NICK_TAKEN", "NICK_INVALID", "TOKEN_INVALID", "ALREADY_JOINED"]);
 
 function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: string; avatar: string; onLeave: (code: string) => void }) {
   const { t } = useTranslation();
@@ -191,6 +192,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
   const [me, setMe] = useState<{ nickname: string; avatar: string; score: number; rank: number } | null>(null);
   const [theme, setTheme] = useState<Theme>("cute");
   const [chatMode, setChatMode] = useState<ChatMode>("open");
+  const [muted, setMuted] = useState(false);
   const [status, setStatus] = useState<SocketStatus>("connecting");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const socket = useRef<GameSocket | null>(null);
@@ -203,6 +205,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
     if (s.me) setMe({ nickname: s.me.nickname, avatar: s.me.avatar, score: s.me.score, rank: s.me.rank });
     setTheme(asTheme(s.theme));
     setChatMode(asChatMode(s.chat));
+    setMuted(!!s.me?.muted);
     if (s.question) lastQuestion.current = s.question;
     switch (s.state.state) {
       case "lobby":
@@ -245,10 +248,15 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
         return setTheme(asTheme(p.d.theme));
       case "game:chat":
         return setChatMode(asChatMode(p.d.mode));
+      case "player:muted":
+        return setMuted(p.d.muted);
       case "player:kicked":
         storage()?.removeItem(tokenKey(pin));
         socket.current?.close();
-        return setView({ kind: "kicked" });
+        // Removed (not banned): back to the name screen to join again
+        // under another name.
+        if (!p.d?.banned) return leave.current("REMOVED");
+        return setView({ kind: "banned" });
       default:
         return;
     }
@@ -308,7 +316,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
 
   const playing = view.kind === "question" && now >= view.q.startsAt && !view.sent && now < view.q.endsAt;
   const tone: Tone | undefined = view.kind === "result" ? (view.r.correct ? "correct" : view.r.answered ? "wrong" : "missed") : undefined;
-  const over = view.kind === "ended" || view.kind === "kicked";
+  const over = view.kind === "ended" || view.kind === "banned";
   // Chat stays out of the way while a player is still answering: it shows
   // once they answered, and then only emoji until the question ends.
   const chatShown = !over && view.kind !== "connecting" && (view.kind !== "question" || view.sent);
@@ -337,7 +345,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
         ) : undefined
       }
       right={me && !over && <Chip>{t("game.points", { count: me.score })}</Chip>}
-      footer={chatShown && chatMode !== "off" && <ChatBar mode={chatMode} textAllowed={view.kind !== "question"} send={sendChat} />}
+      footer={chatShown && chatMode !== "off" && <ChatBar mode={chatMode} muted={muted} textAllowed={view.kind !== "question"} send={sendChat} />}
     >
       {status === "reconnecting" && <Notice kind="warn">{t("game.reconnecting")}</Notice>}
       {submitError && <Notice kind="error">{t(`game.errors.${submitError}`, { defaultValue: t("errors.INTERNAL") })}</Notice>}
@@ -421,7 +429,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
           </Link>
         </>
       )}
-      {view.kind === "kicked" && <Big>{t("game.errors.KICKED")}</Big>}
+      {view.kind === "banned" && <Big>{t("game.errors.BANNED")}</Big>}
       {view.kind === "rejoinWait" && (
         <>
           <Big>{t("game.rejoin.waitTitle")}</Big>
