@@ -17,6 +17,10 @@ pub const GAME_TTL_S: u64 = 24 * 60 * 60;
 #[allow(dead_code)] // default for LiveStore::new
 pub const COUNTDOWN_MS: u64 = 3_000;
 pub const MAX_PLAYERS: u32 = 200;
+/// How long after a question's deadline an answer still counts. A tap made
+/// with a moment left can reach the server just after the end on slow
+/// phones or busy classroom Wi-Fi; the reveal waits this long too.
+pub const ANSWER_GRACE_MS: u64 = 500;
 
 macro_rules! script {
     ($name:literal) => {
@@ -73,14 +77,28 @@ pub struct NewPlayer {
     pub token_hash: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JoinRefusal {
     PinInvalid,
     Locked,
     Kicked,
     Full,
     NickTaken,
+    /// The name belongs to an offline player on another device; the host
+    /// has been asked to let this device in as them.
+    RejoinWait {
+        player_id: String,
+    },
+}
+
+/// A successful `player:join`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Joined {
+    /// A new player, with their join order.
+    New(u32),
+    /// A returning player took their name back (same device, same signed-in
+    /// user, or let in by the host). Their score and answers are kept.
+    Reclaimed { player_id: String },
 }
 
 /// The answer of [`LiveStore::chat_slot`].
@@ -333,7 +351,7 @@ impl LiveStore {
         pin: &str,
         player_id: &str,
         p: &NewPlayer,
-    ) -> Result<std::result::Result<u32, JoinRefusal>> {
+    ) -> Result<std::result::Result<Joined, JoinRefusal>> {
         let record = PlayerRecord {
             nickname: p.nickname.clone(),
             avatar: p.avatar.clone(),
@@ -353,6 +371,9 @@ impl LiveStore {
                     keys::tokens(pin),
                     keys::nicks(pin),
                     keys::kicked(pin),
+                    keys::online(pin),
+                    keys::rejoin(pin),
+                    keys::rejoin_ok(pin),
                 ],
                 vec![
                     player_id.into(),
@@ -361,12 +382,19 @@ impl LiveStore {
                     p.token_hash.clone(),
                     p.device_id.clone(),
                     MAX_PLAYERS.to_string(),
+                    p.user_id.clone().unwrap_or_default(),
                 ],
             )
             .await?,
         )?;
         Ok(match text(&out[0])?.as_str() {
-            "OK" => Ok(int(&out[1])? as u32),
+            "OK" => Ok(Joined::New(int(&out[1])? as u32)),
+            "RECLAIMED" => Ok(Joined::Reclaimed {
+                player_id: text(&out[1])?,
+            }),
+            "REJOIN_WAIT" => Err(JoinRefusal::RejoinWait {
+                player_id: text(&out[1])?,
+            }),
             "PIN_INVALID" => Err(JoinRefusal::PinInvalid),
             "LOCKED" => Err(JoinRefusal::Locked),
             "KICKED" => Err(JoinRefusal::Kicked),
@@ -391,6 +419,48 @@ impl LiveStore {
             )
             .await?;
         Ok(int(&out)? == 1)
+    }
+
+    /// `host:rejoin`: lets the device that asked to rejoin as `player_id`
+    /// take that name back on its next try. False if nobody asked.
+    pub async fn allow_rejoin(&self, pin: &str, player_id: &str) -> Result<bool> {
+        let device: Option<String> = self.redis.hget(keys::rejoin(pin), player_id).await?;
+        let Some(device) = device else {
+            return Ok(false);
+        };
+        let _: i64 = self
+            .redis
+            .hset(keys::rejoin_ok(pin), (player_id, device))
+            .await?;
+        let _: bool = self
+            .redis
+            .expire(keys::rejoin_ok(pin), GAME_TTL_S as i64, None)
+            .await?;
+        Ok(true)
+    }
+
+    /// True when every player with an open socket has answered question
+    /// `index` (and at least one is connected). Players who answered and
+    /// then dropped off do not count towards it, so the reveal never comes
+    /// before someone still in the room has answered.
+    pub async fn all_connected_answered(&self, pin: &str, index: usize) -> Result<bool> {
+        let online: std::collections::HashMap<String, i64> =
+            self.redis.hgetall(keys::online(pin)).await?;
+        let online: Vec<String> = online
+            .into_iter()
+            .filter(|(_, n)| *n > 0)
+            .map(|(id, _)| id)
+            .collect();
+        if online.is_empty() {
+            return Ok(false);
+        }
+        let answered: std::collections::HashSet<String> = self
+            .redis
+            .hkeys::<Vec<String>, _>(keys::answers(pin, index))
+            .await?
+            .into_iter()
+            .collect();
+        Ok(online.iter().all(|id| answered.contains(id)))
     }
 
     /// Opens or closes the lobby to new players (FR-GM-04).
@@ -471,6 +541,7 @@ impl LiveStore {
                     to_i,
                     self.countdown_ms.to_string(),
                     time_limit_ms.to_string(),
+                    ANSWER_GRACE_MS.to_string(),
                 ],
             )
             .await?,
@@ -528,6 +599,7 @@ impl LiveStore {
                     index.to_string(),
                     player_id.into(),
                     serde_json::to_string(submission)?,
+                    ANSWER_GRACE_MS.to_string(),
                 ],
             )
             .await?,
@@ -652,6 +724,8 @@ impl LiveStore {
             keys::nicks(pin),
             keys::kicked(pin),
             keys::online(pin),
+            keys::rejoin(pin),
+            keys::rejoin_ok(pin),
         ];
         k.extend((0..meta.total).map(|i| keys::answers(pin, i)));
         let out = self

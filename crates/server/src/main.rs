@@ -196,6 +196,7 @@ async fn serve(role: Role, cfg: Config) -> anyhow::Result<()> {
         let service = gateway::game::GameService::new(store, state.db.clone(), hub);
         gateway::spawn_sweep(service.clone());
         gateway::spawn_suspended_sweep(service.clone());
+        gateway::spawn_stale_sweep(service.clone());
         let join = cfg.auth.join_base();
         let origins = gateway::AllowedOrigins::new([cfg.auth.public_url.as_str(), join.as_str()]);
         app = app.merge(gateway::router(service, origins));

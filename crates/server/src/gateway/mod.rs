@@ -204,6 +204,32 @@ pub fn spawn_suspended_sweep(service: Arc<GameService>) {
     });
 }
 
+/// How often to look for games nobody finished.
+const STALE_SWEEP_EVERY: Duration = Duration::from_secs(5 * 60);
+/// A game still open this long after it was created was left behind: the
+/// host closed the tab mid-game, or in the lobby. Live keys expire after
+/// 24 h but PostgreSQL would keep it "running" for ever, holding a slot of
+/// MAX_ACTIVE_GAMES and a report that cannot be deleted.
+const STALE_AFTER_HOURS: i32 = 6;
+
+/// Ends left-behind games (see [`STALE_AFTER_HOURS`]). A game whose live
+/// state is still in Redis ends normally once nobody is connected; one whose
+/// live state is gone is closed in PostgreSQL from the answers it saved.
+pub fn spawn_stale_sweep(service: Arc<GameService>) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(STALE_SWEEP_EVERY);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tick.tick().await;
+            match service.end_stale_games(STALE_AFTER_HOURS).await {
+                Ok(0) => {}
+                Ok(n) => tracing::info!(n, "ended left-behind games"),
+                Err(e) => tracing::warn!(error = %e, "stale-game sweep failed"),
+            }
+        }
+    });
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Who {
     Anonymous,
@@ -491,6 +517,10 @@ impl Connection {
                     ClientMessage::HostKick(k) => {
                         svc.kick(&pin, &k.player_id).await?.map(|_| json!({}))
                     }
+                    ClientMessage::HostRejoin(r) => svc
+                        .allow_rejoin(&pin, &r.player_id)
+                        .await?
+                        .map(|_| json!({})),
                     ClientMessage::HostStart(_) => svc.start(&pin).await?.map(|_| json!({})),
                     ClientMessage::HostNext(n) => {
                         svc.next(&pin, n.expect).await?.map(|_| json!({}))

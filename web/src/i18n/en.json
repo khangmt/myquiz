@@ -248,7 +248,9 @@
       "UNAUTHENTICATED": "Sign in to host a game.",
       "NOT_FOUND": "Player not found.",
       "DISCONNECTED": "Disconnected, please try again.",
-      "TIMEOUT": "The server didn't answer, please try again."
+      "TIMEOUT": "The server didn't answer, please try again.",
+      "LOCKED_REJOIN": "The lobby is locked. Only players already in the game can rejoin, under the same name.",
+      "REJOIN_WAIT": "Waiting for the host to let you back in."
     },
     "qr": "QR code to join the game",
     "cancel": "Cancel",
@@ -312,6 +314,14 @@
         "DISCONNECTED": "Not connected",
         "INTERNAL": "Couldn't send that"
       }
+    },
+    "rejoin": {
+      "waitTitle": "This name is already in the game",
+      "waitBody": "If it's you on a new phone or browser, the host has been asked to let you back in. Your points are kept.",
+      "otherName": "Use a different name",
+      "request": "{{name}} wants to rejoin from a new device.",
+      "allow": "Let them in",
+      "ignore": "Ignore"
     }
   },
   "reports": {

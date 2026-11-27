@@ -64,10 +64,10 @@ export function Play() {
     api<PinCheck>(`/games/pin/${encodeURIComponent(pin)}`)
       .then((game) => {
         if (!live) return;
-        if (game.locked) {
-          setError("LOCKED");
-          setStage({ kind: "pin" });
-        } else setStage({ kind: "nickname", game });
+        // A locked lobby still lets players who are already in the game
+        // back in under their name; the server refuses new names.
+        if (game.locked) setError("LOCKED_REJOIN");
+        setStage({ kind: "nickname", game });
       })
       .catch((e) => {
         if (!live) return;
@@ -176,7 +176,11 @@ type View =
   | { kind: "leaderboard"; top: ScoreRow[] }
   | { kind: "podium"; top: ScoreRow[] }
   | { kind: "ended"; reason: string }
-  | { kind: "kicked" };
+  | { kind: "kicked" }
+  /** The name belongs to an offline player; waiting for the host's OK. */
+  | { kind: "rejoinWait" };
+
+const REJOIN_RETRY_MS = 3000;
 
 /** Leave codes send the player back to the PIN or nickname screen. */
 const FATAL = new Set(["PIN_INVALID", "LOCKED", "KICKED", "FULL", "NICK_TAKEN", "NICK_INVALID", "TOKEN_INVALID", "ALREADY_JOINED"]);
@@ -251,30 +255,36 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
   }, [pin]);
 
   useEffect(() => {
-    const s = new GameSocket({
-      onPush,
-      onStatus: setStatus,
-      onOpen: () => {
-        const token = storage()?.getItem(tokenKey(pin));
-        const attempt = token
-          ? s.request<GameSnapshot>({ t: "player:resume", d: { pin, token } })
-          : s.request<PlayerJoined>({ t: "player:join", d: { pin, nickname: nickname.trim(), deviceId: deviceId(), avatar } }).then((j) => {
-              storage()?.setItem(tokenKey(pin), j.token);
-              return j.snapshot;
-            });
-        attempt.then(fromSnapshot).catch((e) => {
-          const code = e instanceof AckError ? e.code : "INTERNAL";
-          if (FATAL.has(code)) {
-            s.close();
-            leave.current(code);
-          }
-          // Anything else (a timeout, a dropped socket) is retried on the
-          // next reconnect.
-        });
-      },
-    });
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const enter = () => {
+      clearTimeout(retry);
+      const token = storage()?.getItem(tokenKey(pin));
+      const attempt = token
+        ? s.request<GameSnapshot>({ t: "player:resume", d: { pin, token } })
+        : s.request<PlayerJoined>({ t: "player:join", d: { pin, nickname: nickname.trim(), deviceId: deviceId(), avatar } }).then((j) => {
+            storage()?.setItem(tokenKey(pin), j.token);
+            return j.snapshot;
+          });
+      attempt.then(fromSnapshot).catch((e) => {
+        const code = e instanceof AckError ? e.code : "INTERNAL";
+        if (code === "REJOIN_WAIT") {
+          // Ask again until the host lets this phone in.
+          setView({ kind: "rejoinWait" });
+          retry = setTimeout(enter, REJOIN_RETRY_MS);
+        } else if (FATAL.has(code)) {
+          s.close();
+          leave.current(code);
+        }
+        // Anything else (a timeout, a dropped socket) is retried on the
+        // next reconnect.
+      });
+    };
+    const s = new GameSocket({ onPush, onStatus: setStatus, onOpen: enter });
     socket.current = s;
-    return () => s.close();
+    return () => {
+      clearTimeout(retry);
+      s.close();
+    };
     // nickname is read once, at join time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pin, onPush, fromSnapshot]);
@@ -412,6 +422,23 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
         </>
       )}
       {view.kind === "kicked" && <Big>{t("game.errors.KICKED")}</Big>}
+      {view.kind === "rejoinWait" && (
+        <>
+          <Big>{t("game.rejoin.waitTitle")}</Big>
+          <Muted>{t("game.rejoin.waitBody")}</Muted>
+          <Waiting />
+          <button
+            type="button"
+            className={btn.secondary}
+            onClick={() => {
+              socket.current?.close();
+              leave.current("NICK_TAKEN");
+            }}
+          >
+            {t("game.rejoin.otherName")}
+          </button>
+        </>
+      )}
     </Stage>
     </ThemeContext.Provider>
   );

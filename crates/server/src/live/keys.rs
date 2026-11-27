@@ -43,3 +43,11 @@ pub fn chat_cooldown(pin: &str, player_id: &str, kind: &str) -> String {
 pub fn chat_rate(pin: &str) -> String {
     format!("game:{pin}:chat:rate")
 }
+/// Player id to the device asking to take that player's name back.
+pub fn rejoin(pin: &str) -> String {
+    format!("game:{pin}:rejoin")
+}
+/// Player id to the device the host let back in under that name.
+pub fn rejoin_ok(pin: &str) -> String {
+    format!("game:{pin}:rejoin:ok")
+}

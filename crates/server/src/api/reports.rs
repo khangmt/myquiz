@@ -751,7 +751,9 @@ fn xlsx(r: &SessionReport, snapshot: &QuizSnapshot) -> ApiResult<Vec<u8>> {
             for (c, cell) in row.iter().enumerate() {
                 match cell.parse::<f64>() {
                     Ok(n) if numeric.contains(&c) => sheet.write_number(r, c as u16, n)?,
-                    _ => sheet.write_string(r, c as u16, safe_cell(cell))?,
+                    // write_string never makes a formula, so cells are
+                    // written as typed; safe_cell is for CSV only.
+                    _ => sheet.write_string(r, c as u16, cell)?,
                 };
             }
         }

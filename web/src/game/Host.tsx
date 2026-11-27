@@ -11,6 +11,7 @@ import type { QuestionReveal } from "../generated/QuestionReveal";
 import type { QuestionStart } from "../generated/QuestionStart";
 import type { ScoreRow } from "../generated/ScoreRow";
 import type { ServerPush } from "../generated/ServerPush";
+import type { RejoinRequest } from "../generated/RejoinRequest";
 import { AckError, GameSocket, type SocketStatus } from "./socket";
 import { JoinQr } from "./JoinQr";
 import { Big, btn, Chip, Countdown, Muted, Notice, optionStyle, outline, panel, Podium, Scores, Shape, Stage, timeFraction, Waiting } from "./ui";
@@ -117,6 +118,8 @@ export function Host() {
   const { add: addChat, clear: clearChat } = chat;
   const hiddenRef = useRef(false);
   hiddenRef.current = chatHidden;
+  // Players on a new device asking to continue under their name.
+  const [rejoins, setRejoins] = useState<RejoinRequest[]>([]);
 
   const fromSnapshot = useCallback((s: GameSnapshot) => {
     state.current = s.state;
@@ -185,6 +188,10 @@ export function Host() {
       case "chat:message":
         if (!hiddenRef.current) addChat(p.d);
         return;
+      case "rejoin:request": {
+        const req = p.d;
+        return setRejoins((rs) => (rs.some((r) => r.playerId === req.playerId) ? rs : [...rs, req]));
+      }
       default:
         return;
     }
@@ -332,6 +339,29 @@ export function Host() {
         <ChatPopups bubbles={chat.bubbles} floats={chat.floats} compact={view.kind === "question"} />
       )}
       {status === "reconnecting" && <Notice kind="warn">{t("game.reconnecting")}</Notice>}
+      {live &&
+        rejoins.map((r) => {
+          const dismiss = () => setRejoins((rs) => rs.filter((x) => x.playerId !== r.playerId));
+          return (
+            <div key={r.playerId} role="status" className={`${panel} flex w-full flex-wrap items-center gap-3 px-4 py-3`}>
+              <Avatar id={r.avatar} size={40} />
+              <span className="min-w-0 flex-1 font-semibold">{t("game.rejoin.request", { name: r.nickname })}</span>
+              <button
+                type="button"
+                className={btn.danger}
+                onClick={() => {
+                  dismiss();
+                  void act({ t: "host:rejoin", d: { playerId: r.playerId } });
+                }}
+              >
+                {t("game.rejoin.allow")}
+              </button>
+              <button type="button" className={btn.ghost} onClick={dismiss}>
+                {t("game.rejoin.ignore")}
+              </button>
+            </div>
+          );
+        })}
       {actionError && <Notice kind="error">{t(`game.errors.${actionError}`, { defaultValue: t("errors.INTERNAL") })}</Notice>}
 
       {view.kind === "connecting" && <Muted>{t("common.loading")}</Muted>}
