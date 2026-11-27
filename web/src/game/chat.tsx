@@ -154,7 +154,7 @@ export function ChatModePicker({ value, disabled, onChange }: { value: ChatMode;
  * right now, a one-line box. `send` resolves when the server took it and
  * rejects with the refusal code.
  */
-export function ChatBar({ mode, textAllowed, send }: { mode: ChatMode; textAllowed: boolean; send: (msg: { text?: string; emoji?: string }) => Promise<unknown> }) {
+export function ChatBar({ mode, muted, textAllowed, send }: { mode: ChatMode; muted?: boolean; textAllowed: boolean; send: (msg: { text?: string; emoji?: string }) => Promise<unknown> }) {
   const { t } = useTranslation();
   const [text, setText] = useState("");
   const [note, setNote] = useState<{ kind: "ok" | "error"; code: string } | null>(null);
@@ -175,6 +175,14 @@ export function ChatBar({ mode, textAllowed, send }: { mode: ChatMode; textAllow
   }, [restUntil]);
 
   if (mode === "off") return null;
+  if (muted) {
+    return (
+      <p className="w-full text-center text-sm font-semibold text-ink/60" data-testid="chat-bar">
+        <span aria-hidden>🔇 </span>
+        {t("game.chat.muted")}
+      </p>
+    );
+  }
   const now = Date.now();
   const emojiResting = now < restUntil.emoji;
   const textResting = now < restUntil.text;

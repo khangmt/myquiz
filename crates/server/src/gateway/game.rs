@@ -118,6 +118,7 @@ impl GameService {
                             }
                             _ => false,
                         },
+                        muted: players.iter().any(|(pid, p)| pid == id && p.muted),
                     }),
                     None => None,
                 }
@@ -260,8 +261,10 @@ impl GameService {
         self.push_lobby_now(pin).await
     }
 
-    pub async fn kick(&self, pin: &str, player_id: &str) -> Result<Result<(), Code>> {
-        if !self.store.kick(pin, player_id).await? {
+    /// `host:kick` (`ban` false) and `host:ban`. Either way the player
+    /// leaves the game and the report; only a ban keeps their device out.
+    pub async fn kick(&self, pin: &str, player_id: &str, ban: bool) -> Result<Result<(), Code>> {
+        if !self.store.kick(pin, player_id, ban).await? {
             return Ok(Err("NOT_FOUND"));
         }
         sqlx::query("UPDATE session_players SET kicked = true WHERE id = $1")
@@ -273,7 +276,25 @@ impl GameService {
                 pin,
                 Delivery::Player {
                     id: player_id.to_string(),
-                    text: encode(&ServerPush::PlayerKicked(Empty {})),
+                    text: encode(&ServerPush::PlayerKicked(PlayerKicked { banned: ban })),
+                },
+            )
+            .await?;
+        self.push_lobby_now(pin).await?;
+        Ok(Ok(()))
+    }
+
+    /// `host:mute`: stops or allows again a player's chat.
+    pub async fn mute(&self, pin: &str, player_id: &str, muted: bool) -> Result<Result<(), Code>> {
+        if !self.store.set_muted(pin, player_id, muted).await? {
+            return Ok(Err("NOT_FOUND"));
+        }
+        self.hub
+            .publish(
+                pin,
+                Delivery::Player {
+                    id: player_id.to_string(),
+                    text: encode(&ServerPush::PlayerMuted(PlayerMuted { muted })),
                 },
             )
             .await?;
@@ -472,7 +493,7 @@ impl GameService {
         .await;
         if let Err(e) = insert {
             // Undo the Redis join so Redis and PostgreSQL agree.
-            let _ = self.store.kick(&req.pin, &player_id).await;
+            let _ = self.store.kick(&req.pin, &player_id, false).await;
             return Err(e.into());
         }
 
@@ -590,6 +611,9 @@ impl GameService {
         let Some(player) = self.store.player(pin, player_id).await? else {
             return Ok(Err("FORBIDDEN"));
         };
+        if player.muted {
+            return Ok(Err("MUTED"));
+        }
         let (kind, cooldown) = if text.is_some() {
             ("text", CHAT_TEXT_COOLDOWN_MS)
         } else {
@@ -929,6 +953,7 @@ fn lobby_list(players: &[(String, PlayerRecord)]) -> Vec<LobbyPlayer> {
             id: id.clone(),
             nickname: p.nickname.clone(),
             avatar: avatar_of(id, p),
+            muted: p.muted,
         })
         .collect()
 }
@@ -994,7 +1019,7 @@ fn refusal_code(r: JoinRefusal) -> Code {
     match r {
         JoinRefusal::PinInvalid => "PIN_INVALID",
         JoinRefusal::Locked => "LOCKED",
-        JoinRefusal::Kicked => "KICKED",
+        JoinRefusal::Banned => "BANNED",
         JoinRefusal::Full => "FULL",
         JoinRefusal::NickTaken => "NICK_TAKEN",
         JoinRefusal::RejoinWait { .. } => "REJOIN_WAIT",

@@ -40,6 +40,7 @@ function savePhonesPreference(show: boolean) {
     // Private mode: the choice lasts for this game only.
   }
 }
+import { LobbyPlayerChip, PlayersDialog } from "./players";
 
 /** The lobby's "game name" box (e.g. the class), saved to the report as the
  *  host types, so games of one quiz with different classes stay apart. */
@@ -145,6 +146,8 @@ export function Host() {
   hiddenRef.current = chatHidden;
   // Players on a new device asking to continue under their name.
   const [rejoins, setRejoins] = useState<RejoinRequest[]>([]);
+  // The list of players, to mute, remove or ban one mid-game.
+  const [managing, setManaging] = useState(false);
 
   const fromSnapshot = useCallback((s: GameSnapshot) => {
     state.current = s.state;
@@ -322,10 +325,12 @@ export function Host() {
                 <span className="text-ink/60">PIN</span>
                 <span className="tracking-wider">{pin}</span>
               </Chip>
-              <Chip>
-                <PersonIcon />
-                {players.length}
-              </Chip>
+              <button type="button" aria-label={t("game.players.title")} aria-haspopup="dialog" className="rounded-full transition hover:brightness-95" onClick={() => setManaging(true)}>
+                <Chip>
+                  <PersonIcon />
+                  {players.length}
+                </Chip>
+              </button>
                 </>
               )}
             </>
@@ -417,6 +422,7 @@ export function Host() {
         )
       }
     >
+      {live && managing && view.kind !== "lobby" && <PlayersDialog players={players} act={act} onClose={() => setManaging(false)} />}
       {live && !chatHidden && chatMode !== "off" && (
         // Fewer texts at once while a question is up (only emoji arrive then).
         <ChatPopups bubbles={chat.bubbles} floats={chat.floats} compact={view.kind === "question"} />
@@ -486,18 +492,7 @@ export function Host() {
             ) : (
               <ul className="flex flex-wrap content-start gap-2">
                 {players.map((p) => (
-                  <li key={p.id} className="group flex animate-pop items-center gap-2 rounded-full border-2 border-ink bg-white py-1 pl-1 pr-1 text-lg font-bold">
-                    <Avatar id={p.avatar} size={40} />
-                    {p.nickname}
-                    <button
-                      type="button"
-                      aria-label={t("game.kick", { name: p.nickname })}
-                      className="ml-1 flex h-7 w-7 items-center justify-center rounded-full text-sm text-ink/40 transition hover:bg-coral hover:text-white focus-visible:bg-coral focus-visible:text-white"
-                      onClick={() => act({ t: "host:kick", d: { playerId: p.id } })}
-                    >
-                      ✕
-                    </button>
-                  </li>
+                  <LobbyPlayerChip key={p.id} player={p} act={act} />
                 ))}
               </ul>
             )}

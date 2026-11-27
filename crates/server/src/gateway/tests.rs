@@ -546,19 +546,34 @@ async fn kick_lock_and_end_early() {
     )
     .await;
 
-    // Kick: the player is told and disconnected, and cannot rejoin.
+    // Remove: the player is told and disconnected, and may come back from
+    // the same phone under another name.
     host.ok("host:kick", json!({ "playerId": pa["playerId"] }))
         .await;
+    assert_eq!(a.push("player:kicked").await["banned"], false);
     assert!(a.closed().await);
+    let mut back = Bot::connect(&env.addr, None).await;
+    let pt = back
+        .ok(
+            "player:join",
+            json!({ "pin": pin, "nickname": "Troll2", "deviceId": "dev-t" }),
+        )
+        .await;
+
+    // Ban: removed again, and now that phone stays out under any name.
+    host.ok("host:ban", json!({ "playerId": pt["playerId"] }))
+        .await;
+    assert_eq!(back.push("player:kicked").await["banned"], true);
+    assert!(back.closed().await);
     let mut again = Bot::connect(&env.addr, None).await;
     assert_eq!(
         again
             .refused(
                 "player:join",
-                json!({ "pin": pin, "nickname": "Troll2", "deviceId": "dev-t" })
+                json!({ "pin": pin, "nickname": "Troll3", "deviceId": "dev-t" })
             )
             .await,
-        "KICKED"
+        "BANNED"
     );
 
     // Lock: new players are refused with a clear code.
@@ -591,14 +606,17 @@ async fn kick_lock_and_end_early() {
         .await
         .unwrap();
     assert_eq!(saved, 1);
-    let kicked: bool = sqlx::query_scalar(
-        "SELECT kicked FROM session_players WHERE session_id = $1 AND nickname = 'Troll'",
-    )
-    .bind(session)
-    .fetch_one(&env.db)
-    .await
-    .unwrap();
-    assert!(kicked);
+    for nick in ["Troll", "Troll2"] {
+        let kicked: bool = sqlx::query_scalar(
+            "SELECT kicked FROM session_players WHERE session_id = $1 AND nickname = $2",
+        )
+        .bind(session)
+        .bind(nick)
+        .fetch_one(&env.db)
+        .await
+        .unwrap();
+        assert!(kicked, "{nick}");
+    }
 }
 
 #[tokio::test]
@@ -1014,4 +1032,66 @@ async fn left_behind_games_are_closed() {
     );
     assert_eq!(status(busy).await.0, "lobby");
     let _ = env.store.finish(&busy_pin).await;
+}
+
+#[tokio::test]
+async fn mute_stops_a_players_chat_until_unmuted() {
+    let env = env_or_skip!();
+    let (pin, sid, _) = seed_game(&env).await;
+    let mut host = Bot::connect(&env.addr, Some(&sid)).await;
+    host.ok("host:attach", json!({ "pin": pin })).await;
+    let mut a = Bot::connect(&env.addr, None).await;
+    let pa = a
+        .ok(
+            "player:join",
+            json!({ "pin": pin, "nickname": "Loud", "deviceId": "dev-loud" }),
+        )
+        .await;
+    let id = pa["playerId"].clone();
+
+    // Only the host mutes; the player hears it and the lobby shows it.
+    assert_eq!(
+        a.req("host:mute", json!({ "playerId": id, "muted": true }))
+            .await["code"],
+        "FORBIDDEN"
+    );
+    host.ok("host:mute", json!({ "playerId": id, "muted": true }))
+        .await;
+    assert_eq!(a.push("player:muted").await["muted"], true);
+    let lobby = host.push("lobby:update").await;
+    let shown = lobby["players"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["id"] == id)
+        .unwrap()
+        .clone();
+    assert_eq!(shown["muted"], true);
+    assert_eq!(
+        host.req("host:mute", json!({ "playerId": "nobody", "muted": true }))
+            .await["code"],
+        "NOT_FOUND"
+    );
+
+    // Muted: no text and no emoji; a reconnecting phone knows it.
+    assert_eq!(
+        a.req("player:chat", json!({ "text": "hi" })).await["code"],
+        "MUTED"
+    );
+    assert_eq!(
+        a.req("player:chat", json!({ "emoji": "clap" })).await["code"],
+        "MUTED"
+    );
+    let mut phone = Bot::connect(&env.addr, None).await;
+    let snap = phone
+        .ok("player:resume", json!({ "pin": pin, "token": pa["token"] }))
+        .await;
+    assert_eq!(snap["me"]["muted"], true);
+
+    // Unmuted: chat works again.
+    host.ok("host:mute", json!({ "playerId": id, "muted": false }))
+        .await;
+    assert_eq!(a.push("player:muted").await["muted"], false);
+    a.ok("player:chat", json!({ "emoji": "clap" })).await;
+    assert_eq!(host.push("chat:message").await["emoji"], "clap");
 }

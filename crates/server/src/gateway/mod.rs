@@ -514,9 +514,17 @@ impl Connection {
                     ClientMessage::HostTheme(th) => {
                         svc.set_theme(&pin, &th.theme).await?.map(|_| json!({}))
                     }
-                    ClientMessage::HostKick(k) => {
-                        svc.kick(&pin, &k.player_id).await?.map(|_| json!({}))
+                    ClientMessage::HostKick(k) => svc
+                        .kick(&pin, &k.player_id, false)
+                        .await?
+                        .map(|_| json!({})),
+                    ClientMessage::HostBan(b) => {
+                        svc.kick(&pin, &b.player_id, true).await?.map(|_| json!({}))
                     }
+                    ClientMessage::HostMute(m) => svc
+                        .mute(&pin, &m.player_id, m.muted)
+                        .await?
+                        .map(|_| json!({})),
                     ClientMessage::HostRejoin(r) => svc
                         .allow_rejoin(&pin, &r.player_id)
                         .await?
