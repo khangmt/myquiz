@@ -19,6 +19,7 @@ const DOC = {
       text: "Thủ đô?",
       mediaId: null,
       mediaUrl: null,
+      markdown: null,
       timeLimitS: 20,
       points: 1000,
       options: [
@@ -97,4 +98,27 @@ test("switching a question to true/false gives the two fixed options", async () 
   expect((screen.getByLabelText("Lựa chọn 1") as HTMLInputElement).value).toBe("Đúng");
   expect((screen.getByLabelText("Lựa chọn 2") as HTMLInputElement).value).toBe("Sai");
   expect(screen.queryByText("+ Thêm lựa chọn")).toBeNull();
+});
+
+test("a question can show code instead of an image, saved as Markdown", async () => {
+  let saved: { questions: { markdown: string | null; mediaId: string | null }[] } | null = null;
+  mockFetch((url, init) => {
+    if (url === "/api/v1/me") return { status: 200, body: ME };
+    if (url === "/api/v1/quizzes/q1" && init?.method === "PUT") {
+      saved = JSON.parse(init.body as string);
+      return { status: 200, body: { ...DOC, version: 5 } };
+    }
+    if (url === "/api/v1/quizzes/q1") return { status: 200, body: DOC };
+  });
+  renderApp("/quizzes/q1/edit");
+  fireEvent.click(await screen.findByRole("tab", { name: "Mã nguồn / Markdown" }));
+  const box = screen.getByLabelText("Mã nguồn / Markdown") as HTMLTextAreaElement;
+  expect(box.value).toBe("```c\n\n```");
+  fireEvent.change(box, { target: { value: "```c\nint x = 1;\n```\n<script>alert(1)</script>" } });
+  const preview = screen.getByTestId("markdown-preview");
+  expect(preview.querySelector("code.language-c")?.textContent).toBe("int x = 1;");
+  expect(preview.querySelector("script")).toBeNull();
+  await waitFor(() => expect(saved).not.toBeNull(), { timeout: 3000 });
+  expect(saved!.questions[0].markdown).toContain("int x = 1;");
+  expect(saved!.questions[0].mediaId).toBeNull();
 });

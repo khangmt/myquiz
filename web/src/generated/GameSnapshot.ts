@@ -19,7 +19,12 @@ theme: string,
 /**
  * Who may chat, one of [`CHAT_MODES`].
  */
-chat: string, players: Array<LobbyPlayer>, 
+chat: string, 
+/**
+ * Whether phones show the question and its image/code (see
+ * [`HostPhones`]).
+ */
+phonesShowQuestion: boolean, players: Array<LobbyPlayer>, 
 /**
  * Set while a question is running.
  */

@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { QuestionDoc } from "../generated/QuestionDoc";
 import type { QuestionKind } from "../generated/QuestionKind";
-import { ImageField } from "./ImageField";
+import { MediaField } from "./MediaField";
 import {
   BLANK,
   KINDS,
@@ -81,11 +81,7 @@ export function QuestionEditor({ index, count, question: q, problems, onChange, 
         />
       </label>
 
-      <ImageField
-        url={q.mediaUrl}
-        label={t("editor.addImage")}
-        onChange={(m) => set({ mediaId: m?.id ?? null, mediaUrl: m?.url ?? null })}
-      />
+      <MediaField question={q} onChange={set} />
 
       <div className="flex flex-wrap gap-4 text-sm">
         <label className="flex items-center gap-2">

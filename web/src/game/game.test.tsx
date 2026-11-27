@@ -339,3 +339,68 @@ test("a player sends a message from the lobby, and only emoji after answering", 
   ws.push("game:chat", { mode: "off" });
   await waitFor(() => expect(screen.queryByTestId("chat-bar")).toBeNull());
 });
+
+const code = "```c\nint a[3] = {1, 2, 3};\nprintf(\"%d\", a[1]);\n```";
+
+test("the host shows code during the question and beside the answers, and can enlarge it", async () => {
+  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : url.endsWith("/config") ? { status: 200, body: { joinUrl: null } } : undefined));
+  renderApp("/host/123456");
+  const ws = await socket();
+  ws.ack("host:attach", { ...lobby, phonesShowQuestion: true, players: [{ id: "p1", nickname: "Lan", avatar: "bunny" }] });
+  expect(await screen.findByText("Bắt đầu")).toBeTruthy();
+  ws.push("question:start", question({ markdown: code }));
+  expect((await screen.findByTestId("question-media")).textContent).toContain("printf");
+
+  // Z enlarges, Esc closes.
+  fireEvent.keyDown(window, { key: "z" });
+  expect(await screen.findByRole("dialog")).toBeTruthy();
+  fireEvent.keyDown(window, { key: "Escape" });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+  ws.push("question:reveal", { index: 0, correctOptionIds: [0], acceptedAnswers: [], distribution: [{ optionId: 0, count: 1 }], topTextAnswers: [] });
+  await screen.findByText("Tiếp");
+  expect(screen.getByTestId("question-media").textContent).toContain("printf");
+  expect(screen.getByText("Hà Nội")).toBeTruthy();
+  fireEvent.click(screen.getByLabelText("Phóng to"));
+  expect(await screen.findByRole("dialog")).toBeTruthy();
+});
+
+test("the host chooses whether phones show the question, and the choice is kept", async () => {
+  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : url.endsWith("/config") ? { status: 200, body: { joinUrl: null } } : undefined));
+  renderApp("/host/123456");
+  const ws = await socket();
+  ws.ack("host:attach", { ...lobby, phonesShowQuestion: true });
+  fireEvent.click(await screen.findByText("Điện thoại chỉ hiện đáp án"));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "host:phones", d: { showQuestion: false } });
+  ws.ack("host:phones", {});
+  expect(await screen.findByText("Điện thoại hiện câu hỏi")).toBeTruthy();
+  expect(localStorage.getItem("myquiz.host.phonesShowQuestion")).toBe("0");
+});
+
+test("the host's last choice for phones applies to a new game", async () => {
+  localStorage.setItem("myquiz.host.phonesShowQuestion", "0");
+  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : url.endsWith("/config") ? { status: 200, body: { joinUrl: null } } : undefined));
+  renderApp("/host/123456");
+  const ws = await socket();
+  ws.ack("host:attach", { ...lobby, phonesShowQuestion: true });
+  await waitFor(() => expect(ws.sent.at(-1)).toMatchObject({ t: "host:phones", d: { showQuestion: false } }));
+});
+
+test("phones show the question with its code, or only the answers when the host says so", async () => {
+  localStorage.setItem("myquiz.player.123456", "tok-9");
+  mockFetch(() => undefined);
+  renderApp("/join?pin=123456");
+  const ws = await socket();
+  ws.ack("player:resume", { ...lobby, phonesShowQuestion: true, me: { playerId: "p1", nickname: "Lan", score: 0, rank: 1, answered: false } });
+  expect(await screen.findByText("Bạn đã vào phòng!")).toBeTruthy();
+  ws.push("question:start", question({ markdown: code }));
+  expect((await screen.findByTestId("question-media")).textContent).toContain("printf");
+  expect(screen.getByText("Thủ đô của Việt Nam?")).toBeTruthy();
+
+  ws.push("game:phones", { showQuestion: false });
+  expect(await screen.findByText("Xem câu hỏi trên màn hình chính.")).toBeTruthy();
+  expect(screen.queryByText("Thủ đô của Việt Nam?")).toBeNull();
+  expect(screen.queryByTestId("question-media")).toBeNull();
+  // The answers are still there.
+  expect(screen.getByText("Hà Nội")).toBeTruthy();
+});

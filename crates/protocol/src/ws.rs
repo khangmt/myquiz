@@ -93,6 +93,8 @@ pub enum ClientMessage {
     HostEnd(Empty),
     #[serde(rename = "host:chat")]
     HostChat(HostChat),
+    #[serde(rename = "host:phones")]
+    HostPhones(HostPhones),
     #[serde(rename = "player:join")]
     PlayerJoin(PlayerJoin),
     #[serde(rename = "player:resume")]
@@ -122,6 +124,9 @@ wire! {
     pub struct HostSkip { pub index: usize }
     /// Who may chat, one of [`CHAT_MODES`]; any time during the game.
     pub struct HostChat { pub mode: String }
+    /// Whether players' phones show the question text and its image/code,
+    /// or only the answer buttons; any time during the game.
+    pub struct HostPhones { pub show_question: bool }
 
     pub struct PlayerJoin {
         pub pin: String,
@@ -169,6 +174,9 @@ wire! {
         pub theme: String,
         /// Who may chat, one of [`CHAT_MODES`].
         pub chat: String,
+        /// Whether phones show the question and its image/code (see
+        /// [`HostPhones`]).
+        pub phones_show_question: bool,
         pub players: Vec<LobbyPlayer>,
         /// Set while a question is running.
         pub question: Option<QuestionStart>,
@@ -245,6 +253,8 @@ wire! {
     pub struct GameTheme { pub theme: String }
     /// The host changed who may chat, one of [`CHAT_MODES`].
     pub struct GameChat { pub mode: String }
+    /// The host changed what phones show (see [`HostPhones`]).
+    pub struct GamePhones { pub show_question: bool }
     /// A player's chat popup, to the host only.
     pub struct ChatMessage {
         pub player_id: String,
@@ -298,6 +308,8 @@ pub enum ServerPush {
     GameTheme(GameTheme),
     #[serde(rename = "game:chat")]
     GameChat(GameChat),
+    #[serde(rename = "game:phones")]
+    GamePhones(GamePhones),
     #[serde(rename = "chat:message")]
     ChatMessage(ChatMessage),
     #[serde(rename = "rejoin:request")]

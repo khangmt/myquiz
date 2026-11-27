@@ -7,6 +7,7 @@ import { Editor } from "./pages/Editor";
 import { Placeholder } from "./pages/Placeholder";
 import { Host } from "./game/Host";
 import { Play } from "./game/Play";
+import { MediaWindow } from "./media/MediaWindow";
 import { Report } from "./reports/Report";
 import { Reports } from "./reports/Reports";
 import { QuizList } from "./pages/QuizList";
@@ -22,6 +23,15 @@ export default function App() {
         element={
           <RequireAuth>
             <Host />
+          </RequireAuth>
+        }
+      />
+      {/* The host's pop-out window for a question's image or code. */}
+      <Route
+        path="host/:pin/media"
+        element={
+          <RequireAuth>
+            <MediaWindow />
           </RequireAuth>
         }
       />

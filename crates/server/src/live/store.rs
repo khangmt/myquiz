@@ -123,6 +123,9 @@ pub struct GameMeta {
     pub theme: String,
     /// One of `ws::CHAT_MODES`; "open" until the host changes it.
     pub chat: String,
+    /// Whether phones show the question and its image/code; true until the
+    /// host turns it off.
+    pub phones_show_question: bool,
     pub starts_at_ms: u64,
     pub ends_at_ms: u64,
     pub answered: u32,
@@ -317,6 +320,7 @@ impl LiveStore {
                 "" => "open".into(),
                 c => c.into(),
             },
+            phones_show_question: get("phones") != "0",
             starts_at_ms: num("startsAt"),
             ends_at_ms: num("endsAt"),
             answered: num("answered") as u32,
@@ -481,6 +485,13 @@ impl LiveStore {
     /// Sets who may chat: everyone, emoji only, or nobody.
     pub async fn set_chat(&self, pin: &str, mode: &str) -> Result<()> {
         let _: i64 = self.redis.hset(keys::game(pin), ("chat", mode)).await?;
+        Ok(())
+    }
+
+    /// Sets whether phones show the question and its image/code.
+    pub async fn set_phones(&self, pin: &str, show_question: bool) -> Result<()> {
+        let v = if show_question { "1" } else { "0" };
+        let _: i64 = self.redis.hset(keys::game(pin), ("phones", v)).await?;
         Ok(())
     }
 

@@ -543,7 +543,11 @@ async fn download_a_quiz_as_zip_and_upload_it_again() {
         "acceptedAnswers": ["Hà Nội"], "ignoreDiacritics": true,
     });
     fill["options"] = json!([]);
-    let mut body = quiz("Địa lý: thủ đô", vec![q, fill]);
+    // And one that shows code instead of an image.
+    let code = "```c\nint a[3] = {1, 2, 3};\nprintf(\"%d\", a[1]);\n```";
+    let mut coded = question("In ra gì?");
+    coded["markdown"] = json!(code);
+    let mut body = quiz("Địa lý: thủ đô", vec![q, fill, coded]);
     body["coverMediaId"] = media["id"].clone();
     let res = send(&env.app, lan.req("POST", "/api/v1/quizzes", Some(body))).await;
     let original = json_body(res).await;
@@ -594,6 +598,8 @@ async fn download_a_quiz_as_zip_and_upload_it_again() {
         Some("Bản đồ")
     );
     assert_eq!(bundle.images.len(), 2);
+    assert_eq!(bundle.quiz.questions[2].markdown.as_deref(), Some(code));
+    assert_eq!(bundle.quiz.questions[0].markdown, None);
 
     // A forged or altered link does nothing.
     let mut forged = url.clone();
@@ -621,6 +627,8 @@ async fn download_a_quiz_as_zip_and_upload_it_again() {
     assert_eq!(copy["visibility"], "private");
     assert_eq!(copy["questions"][1]["acceptedAnswers"], json!(["Hà Nội"]));
     assert_eq!(copy["questions"][1]["points"], 2000);
+    assert_eq!(copy["questions"][2]["markdown"], code);
+    assert_eq!(copy["questions"][0]["markdown"], Value::Null);
     assert!(copy["questions"][0]["mediaUrl"]
         .as_str()
         .unwrap()

@@ -29,6 +29,8 @@ pub struct PublicQuestion {
     pub kind: QuestionKind,
     pub text: String,
     pub media: Option<String>,
+    /// Markdown (usually a code block) for the media area.
+    pub markdown: Option<String>,
     pub options: Vec<PublicOption>,
     /// Seconds.
     pub time_limit: u32,
@@ -43,6 +45,7 @@ impl PublicQuestion {
             kind: q.kind,
             text: q.text.clone(),
             media: q.media.clone(),
+            markdown: q.markdown.clone(),
             options: q
                 .options
                 .iter()

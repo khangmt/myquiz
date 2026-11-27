@@ -412,6 +412,7 @@ fn field_of(e: ValidationError) -> &'static str {
         E::QuestionTextLength | E::BlankMarker => "text",
         E::TimeLimit => "timeLimitS",
         E::Points => "points",
+        E::MarkdownLength => "markdown",
         E::OptionCount
         | E::TrueFalseOptionCount
         | E::OptionTextLength

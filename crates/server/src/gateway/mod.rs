@@ -529,6 +529,10 @@ impl Connection {
                     ClientMessage::HostChat(c) => {
                         svc.set_chat(&pin, &c.mode).await?.map(|_| json!({}))
                     }
+                    ClientMessage::HostPhones(p) => {
+                        svc.set_phones(&pin, p.show_question).await?;
+                        ok()
+                    }
                     ClientMessage::HostEnd(_) => {
                         svc.end_game(&pin, EndReason::HostEnded).await?;
                         ok()

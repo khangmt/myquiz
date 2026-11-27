@@ -153,3 +153,59 @@
     transition: none !important;
   }
 }
+
+/* Markdown in a question's media area (src/media/markdown.ts). Code is the
+   usual content, so it gets a projector-friendly monospace font. */
+.md {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.md > * + * {
+  margin-top: 0.6em;
+}
+.md h1, .md h2, .md h3, .md h4 {
+  font-weight: 800;
+  line-height: 1.2;
+}
+.md h1 { font-size: 1.5em; }
+.md h2 { font-size: 1.3em; }
+.md h3 { font-size: 1.15em; }
+.md ul { list-style: disc; padding-left: 1.4em; }
+.md ol { list-style: decimal; padding-left: 1.4em; }
+.md blockquote {
+  border-left: 4px solid var(--color-wood);
+  padding-left: 0.8em;
+  color: color-mix(in srgb, var(--color-ink) 80%, transparent);
+}
+.md table { border-collapse: collapse; }
+.md th, .md td { border: 2px solid var(--color-slate-200); padding: 0.2em 0.6em; }
+.md th { background: var(--color-mint); }
+.md code {
+  font-family: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.95em;
+  /* "==", "++" and "!=" must look like what students type, not one glyph. */
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+.md :not(pre) > code {
+  background: var(--color-slate-100);
+  border-radius: 0.3em;
+  padding: 0.05em 0.3em;
+}
+.md pre.md-code {
+  overflow-x: auto;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 4;
+}
+.md pre.md-code code.hljs {
+  display: block;
+  padding: 0;
+  background: transparent;
+  font-size: 1em;
+  line-height: 1.4;
+}
+/* Sizes: big on the projector, readable on a phone, small in the editor. */
+.md-stage { font-size: clamp(1rem, 0.6rem + 1.1vw, 1.9rem); }
+.md-phone { font-size: 0.95rem; }
+.md-editor { font-size: 0.875rem; }

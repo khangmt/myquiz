@@ -95,7 +95,8 @@
     "MISSING_IMAGE": "Thiếu ảnh được nhắc tới trong quiz.json.",
     "NOT_AN_IMAGE": "Tệp không phải ảnh JPG, PNG hoặc WebP.",
     "IMAGE_TOO_BIG": "Ảnh có kích thước quá lớn.",
-    "BAD_IMAGE_PATH": "Đường dẫn ảnh không hợp lệ."
+    "BAD_IMAGE_PATH": "Đường dẫn ảnh không hợp lệ.",
+    "MARKDOWN_LENGTH": "Khối mã/Markdown tối đa 4000 ký tự."
   },
   "errors": {
     "INTERNAL": "Đã có lỗi. Vui lòng thử lại.",
@@ -181,7 +182,15 @@
     "ignoreDiacritics": "Chấp nhận khi gõ không dấu (\"ha noi\" đúng với \"Hà Nội\")",
     "true": "Đúng",
     "false": "Sai",
-    "confirmDeleteQuestion": "Xoá câu {{n}}?"
+    "confirmDeleteQuestion": "Xoá câu {{n}}?",
+    "media": {
+      "label": "Hiển thị kèm câu hỏi:",
+      "image": "Hình ảnh",
+      "code": "Mã nguồn / Markdown",
+      "codeHint": "Markdown. Đặt mã giữa hai dòng ```c và ``` để tô màu.",
+      "preview": "Xem trước",
+      "empty": "Chưa có nội dung. Nhập mã hoặc văn bản ở bên trái."
+    }
   },
   "game": {
     "reconnecting": "Mất kết nối, đang kết nối lại…",
@@ -317,6 +326,12 @@
       "request": "{{name}} muốn vào lại từ thiết bị mới.",
       "allow": "Cho vào",
       "ignore": "Bỏ qua"
+    },
+    "phones": {
+      "hide": "Điện thoại chỉ hiện đáp án",
+      "show": "Điện thoại hiện câu hỏi",
+      "hint": "Chọn điện thoại của người chơi hiện câu hỏi kèm hình ảnh/mã, hay chỉ hiện các nút đáp án.",
+      "lookUp": "Xem câu hỏi trên màn hình chính."
     }
   },
   "reports": {
@@ -391,5 +406,19 @@
     "banner_other": "{{count}} bộ câu hỏi sẽ bị xoá trong {{days}} ngày nữa:",
     "howToKeep": "Mở và sửa, tổ chức trò chơi, hoặc tải zip để giữ lại.",
     "dismiss": "Ẩn hôm nay"
+  },
+  "media": {
+    "enlarge": "Phóng to",
+    "enlargeHint": "Phóng to (Z)",
+    "enlarged": "Hình ảnh hoặc mã đã phóng to",
+    "zoomIn": "Phóng to (+)",
+    "zoomOut": "Thu nhỏ (−)",
+    "fit": "Vừa màn hình (0)",
+    "popOut": "Cửa sổ mới",
+    "popOutHint": "Mở hình ảnh hoặc mã trong cửa sổ riêng, ví dụ cho màn hình thứ hai. Cửa sổ tự theo câu hỏi.",
+    "close": "Đóng (Esc)",
+    "windowTitle": "Hình ảnh/mã của câu hỏi",
+    "windowConnecting": "Đang chờ màn hình trình chiếu… Hãy giữ trò chơi mở ở thẻ kia.",
+    "windowEmpty": "Hình ảnh hoặc mã của câu hỏi hiện tại sẽ hiện ở đây."
   }
 }

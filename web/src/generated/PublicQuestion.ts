@@ -6,7 +6,11 @@ import type { QuestionKind } from "./QuestionKind";
  * The payload of `question:start` (design section 7), minus the timing
  * fields the gateway adds.
  */
-export type PublicQuestion = { index: number, total: number, type: QuestionKind, text: string, media: string | null, options: Array<PublicOption>, 
+export type PublicQuestion = { index: number, total: number, type: QuestionKind, text: string, media: string | null, 
+/**
+ * Markdown (usually a code block) for the media area.
+ */
+markdown: string | null, options: Array<PublicOption>, 
 /**
  * Seconds.
  */

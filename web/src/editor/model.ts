@@ -36,7 +36,7 @@ export function toSave(d: Draft): SaveQuiz {
     description: d.description,
     coverMediaId: d.coverMediaId,
     visibility: d.visibility,
-    questions: d.questions.map((q) => ({ ...q, mediaUrl: null })),
+    questions: d.questions.map((q) => ({ ...q, mediaUrl: null, markdown: q.markdown?.trim() ? q.markdown : null })),
   };
 }
 
@@ -46,6 +46,7 @@ export function newQuestion(kind: QuestionKind, labels: { true: string; false: s
     text: "",
     mediaId: null,
     mediaUrl: null,
+    markdown: null,
     timeLimitS: kind === "fill_blank" ? 30 : 20,
     points: 1000,
     options: [],
