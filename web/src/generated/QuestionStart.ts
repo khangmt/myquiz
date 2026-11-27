@@ -10,7 +10,11 @@ startsAt: number,
 /**
  * Server clock: when answers stop being accepted.
  */
-endsAt: number, index: number, total: number, type: QuestionKind, text: string, media: string | null, options: Array<PublicOption>, 
+endsAt: number, index: number, total: number, type: QuestionKind, text: string, media: string | null, 
+/**
+ * Markdown (usually a code block) for the media area.
+ */
+markdown: string | null, options: Array<PublicOption>, 
 /**
  * Seconds.
  */

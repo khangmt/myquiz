@@ -10,7 +10,12 @@ mediaId: string | null,
 /**
  * Where to show the image. Filled in by the server; ignored on save.
  */
-mediaUrl: string | null, timeLimitS: number, 
+mediaUrl: string | null, 
+/**
+ * Markdown for the media area instead of an image, e.g. a fenced C
+ * code block; at most 4000 characters.
+ */
+markdown: string | null, timeLimitS: number, 
 /**
  * 0, 1000 or 2000.
  */

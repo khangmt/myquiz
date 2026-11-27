@@ -42,8 +42,10 @@ async fn env() -> Option<Env> {
     redis.init().await.unwrap();
 
     // A short countdown keeps the test fast; the deadline path still waits
-    // for a real 5 s question.
-    let store = LiveStore::with_countdown(redis.clone(), 50);
+    // for a real 5 s question. It must still be long enough for a bot to
+    // answer "too early" on a busy CI runner (tests share one Redis and run
+    // in parallel), so not under a few hundred ms.
+    let store = LiveStore::with_countdown(redis.clone(), 400);
     let hub = Hub::start(redis.clone(), &redis_url).await.unwrap();
     let service = GameService::new(store.clone(), db.clone(), hub);
     super::spawn_sweep(service.clone());
@@ -83,6 +85,7 @@ fn quiz() -> QuizSnapshot {
         kind,
         text: "Q?".into(),
         media: None,
+        markdown: None,
         time_limit_s: 5,
         points: 1000,
         options: opts,
@@ -794,6 +797,38 @@ async fn avatars_and_theme() {
     );
     let snap = host.ok("host:attach", json!({ "pin": pin })).await;
     assert_eq!(snap["theme"], "anime");
+}
+
+#[tokio::test]
+async fn host_hides_the_question_on_phones() {
+    let env = env_or_skip!();
+    let (pin, sid, _) = seed_game(&env).await;
+    let mut host = Bot::connect(&env.addr, Some(&sid)).await;
+    let snap = host.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["phonesShowQuestion"], true);
+    let mut a = Bot::connect(&env.addr, None).await;
+    a.ok(
+        "player:join",
+        json!({ "pin": pin, "nickname": "Ana", "deviceId": "dev-a" }),
+    )
+    .await;
+
+    // Players may not change it.
+    assert_eq!(
+        a.req("host:phones", json!({ "showQuestion": false })).await["code"],
+        "FORBIDDEN"
+    );
+    // The host turns it off; phones hear it and a new snapshot keeps it.
+    host.ok("host:phones", json!({ "showQuestion": false }))
+        .await;
+    assert_eq!(a.push("game:phones").await["showQuestion"], false);
+    let snap = host.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["phonesShowQuestion"], false);
+    // It can change during the game too.
+    host.ok("host:start", json!({})).await;
+    host.ok("host:phones", json!({ "showQuestion": true }))
+        .await;
+    assert_eq!(a.push("game:phones").await["showQuestion"], true);
 }
 
 #[tokio::test]

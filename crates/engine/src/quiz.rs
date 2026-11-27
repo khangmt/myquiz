@@ -14,6 +14,9 @@ pub type OptionId = u32;
 
 pub const TITLE_MAX: usize = 120;
 pub const QUESTION_TEXT_MAX: usize = 300;
+/// Longest Markdown block (code, lists) a question can show instead of an
+/// image. Enough for a 60-line C program.
+pub const MARKDOWN_MAX: usize = 4000;
 pub const OPTION_TEXT_MAX: usize = 120;
 pub const MIN_OPTIONS: usize = 2;
 pub const MAX_OPTIONS: usize = 6;
@@ -67,6 +70,10 @@ pub struct Question {
     /// Stored media id, if the question has an image.
     #[serde(default)]
     pub media: Option<String>,
+    /// Markdown shown in the media area instead of (or below) an image, e.g.
+    /// a fenced C code block. Rendered and sanitised by the web client.
+    #[serde(default)]
+    pub markdown: Option<String>,
     pub time_limit_s: u32,
     /// 0, 1000 or 2000 (FR-QZ-06).
     pub points: u32,
@@ -181,6 +188,8 @@ pub enum ValidationError {
     BlankMarker,
     #[error("fill-in-the-blank questions have no options")]
     UnexpectedOptions,
+    #[error("the code/Markdown block must be at most 4000 characters")]
+    MarkdownLength,
 }
 
 /// Every rule a single question breaks. Empty means valid.
@@ -197,6 +206,12 @@ pub fn validate_question(q: &Question) -> Vec<ValidationError> {
     }
     if !ALLOWED_POINTS.contains(&q.points) {
         errors.push(E::Points);
+    }
+    if q.markdown
+        .as_deref()
+        .is_some_and(|m| m.chars().count() > MARKDOWN_MAX)
+    {
+        errors.push(E::MarkdownLength);
     }
 
     if q.kind.has_options() {
@@ -264,6 +279,7 @@ pub(crate) mod fixtures {
             kind: QuestionKind::Single,
             text: "Thủ đô của Việt Nam là?".into(),
             media: None,
+            markdown: None,
             time_limit_s: 20,
             points: 1000,
             options: vec![

@@ -25,6 +25,10 @@ pub struct QuestionDoc {
     /// Where to show the image. Filled in by the server; ignored on save.
     #[serde(default)]
     pub media_url: Option<String>,
+    /// Markdown for the media area instead of an image, e.g. a fenced C
+    /// code block; at most 4000 characters.
+    #[serde(default)]
+    pub markdown: Option<String>,
     pub time_limit_s: u32,
     /// 0, 1000 or 2000.
     pub points: u32,

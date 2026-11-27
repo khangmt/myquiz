@@ -39,6 +39,7 @@ fn quiz() -> QuizSnapshot {
         kind,
         text: "Q ___".into(),
         media: None,
+        markdown: None,
         time_limit_s: 20,
         points: 1000,
         options: opts,

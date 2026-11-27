@@ -139,12 +139,14 @@ where
         Vec<String>,
         bool,
         serde_json::Value,
+        Option<String>,
     )> = sqlx::query_as(
         "SELECT q.type::text, q.text, q.media_id, m.storage_key, q.time_limit_s, q.points, \
                 q.accepted_answers, q.ignore_diacritics, \
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('text', o.text, 'correct', o.is_correct) \
                                            ORDER BY o.position) \
-                          FROM question_options o WHERE o.question_id = q.id), '[]'::jsonb) \
+                          FROM question_options o WHERE o.question_id = q.id), '[]'::jsonb), \
+                q.markdown \
          FROM questions q LEFT JOIN media m ON m.id = q.media_id \
          WHERE q.quiz_id = $1 ORDER BY q.position",
     )
@@ -153,12 +155,13 @@ where
     .await?;
     rows.into_iter()
         .map(
-            |(kind, text, media, key, time, points, accepted, ignore, options)| {
+            |(kind, text, media, key, time, points, accepted, ignore, options, markdown)| {
                 Ok(QuestionDoc {
                     kind: serde_json::from_value(json!(kind))?,
                     text,
                     media_id: media.map(|m| m.to_string()),
                     media_url: key.as_deref().map(media_url),
+                    markdown,
                     time_limit_s: time as u32,
                     points: points as u32,
                     options: serde_json::from_value(options)?,
@@ -198,6 +201,7 @@ pub fn to_snapshot(title: &str, questions: &[QuestionDoc]) -> QuizSnapshot {
                 kind: q.kind,
                 text: q.text.clone(),
                 media: q.media_url.clone().or_else(|| q.media_id.clone()),
+                markdown: q.markdown.clone().filter(|m| !m.trim().is_empty()),
                 time_limit_s: q.time_limit_s,
                 points: q.points,
                 options: q
@@ -262,6 +266,13 @@ pub fn draft_problems(q: &SaveQuiz) -> Vec<QuizProblemDoc> {
         let mut bad = |code: &str| out.push(problem(Some(i), code));
         if question.text.chars().count() > QUESTION_TEXT_MAX {
             bad("QUESTION_TEXT_LENGTH");
+        }
+        if question
+            .markdown
+            .as_deref()
+            .is_some_and(|m| m.chars().count() > myquiz_engine::quiz::MARKDOWN_MAX)
+        {
+            bad("MARKDOWN_LENGTH");
         }
         if !(myquiz_engine::quiz::TIME_LIMIT_MIN_S..=myquiz_engine::quiz::TIME_LIMIT_MAX_S)
             .contains(&question.time_limit_s)
@@ -374,6 +385,7 @@ pub async fn write_questions(
             "type": q.kind,
             "text": q.text,
             "media_id": q.media_id,
+            "markdown": q.markdown.as_deref().filter(|m| !m.trim().is_empty()),
             "time_limit_s": q.time_limit_s,
             "points": q.points,
             "accepted_answers": q.accepted_answers,
@@ -389,13 +401,13 @@ pub async fn write_questions(
         }
     }
     sqlx::query(
-        "INSERT INTO questions (id, quiz_id, position, type, text, media_id, time_limit_s, \
-                                points, accepted_answers, ignore_diacritics) \
-         SELECT x.id, $1, x.position, x.type, x.text, x.media_id, x.time_limit_s, x.points, \
-                x.accepted_answers, x.ignore_diacritics \
+        "INSERT INTO questions (id, quiz_id, position, type, text, media_id, markdown, \
+                                time_limit_s, points, accepted_answers, ignore_diacritics) \
+         SELECT x.id, $1, x.position, x.type, x.text, x.media_id, x.markdown, x.time_limit_s, \
+                x.points, x.accepted_answers, x.ignore_diacritics \
          FROM jsonb_to_recordset($2) AS x(id uuid, position int, type question_type, text text, \
-              media_id uuid, time_limit_s int, points int, accepted_answers text[], \
-              ignore_diacritics boolean)",
+              media_id uuid, markdown text, time_limit_s int, points int, \
+              accepted_answers text[], ignore_diacritics boolean)",
     )
     .bind(quiz_id)
     .bind(serde_json::Value::Array(qrows))
@@ -780,6 +792,7 @@ mod unit {
             text: "2 + 2?".into(),
             media_id: None,
             media_url: None,
+            markdown: None,
             time_limit_s: 20,
             points: 1000,
             options: vec![

@@ -49,6 +49,10 @@ pub struct QuestionV1 {
     pub image: Option<String>,
     #[serde(default)]
     pub image_alt: Option<String>,
+    /// Markdown for the media area, e.g. a fenced C code block. Older
+    /// files have none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub markdown: Option<String>,
     pub time_limit_s: u32,
     pub points: u32,
     #[serde(default)]
@@ -89,6 +93,7 @@ impl QuizV1 {
                     kind: q.kind,
                     text: q.text.clone(),
                     media: q.image.clone(),
+                    markdown: q.markdown.clone(),
                     time_limit_s: q.time_limit_s,
                     points: q.points,
                     options: q

@@ -20,6 +20,26 @@ import { MusicControl } from "./MusicControl";
 import { secondsLeft, useTicker } from "./useCountdown";
 import type { SessionReport } from "../generated/SessionReport";
 import { asChatMode, ChatModePicker, ChatPopups, useChatPopups, type ChatMode } from "./chat";
+import { hasMedia, MediaZoom, QuestionMedia } from "../media/QuestionMedia";
+import { openMediaWindow, useMediaBroadcast } from "../media/popout";
+
+/** The host's last choice of what phones show, kept for their next game. */
+const PHONES_KEY = "myquiz.host.phonesShowQuestion";
+function phonesPreference(): boolean | null {
+  try {
+    const v = window.localStorage.getItem(PHONES_KEY);
+    return v === null ? null : v === "1";
+  } catch {
+    return null;
+  }
+}
+function savePhonesPreference(show: boolean) {
+  try {
+    window.localStorage.setItem(PHONES_KEY, show ? "1" : "0");
+  } catch {
+    // Private mode: the choice lasts for this game only.
+  }
+}
 import { LobbyPlayerChip, PlayersDialog } from "./players";
 
 /** The lobby's "game name" box (e.g. the class), saved to the report as the
@@ -112,6 +132,11 @@ export function Host() {
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [theme, setTheme] = useState<Theme>("cute");
   const [chatMode, setChatMode] = useState<ChatMode>("open");
+  // Whether phones show the question and its image/code, or only the
+  // answer buttons (when everyone reads the projector).
+  const [phonesShow, setPhonesShow] = useState(true);
+  // The question's image or code, enlarged over the whole screen.
+  const [zoomed, setZoomed] = useState(false);
   // Hides the popups on this screen only; players can still send. For when
   // the host wants a clean projector for a moment without telling the room.
   const [chatHidden, setChatHidden] = useState(false);
@@ -131,6 +156,14 @@ export function Host() {
     setLocked(s.locked);
     setTheme(asTheme(s.theme));
     setChatMode(asChatMode(s.chat));
+    const shown = s.phonesShowQuestion !== false;
+    setPhonesShow(shown);
+    // A new game starts with the host's choice from last time.
+    const pref = phonesPreference();
+    if (s.state.state === "lobby" && pref !== null && pref !== shown) {
+      setPhonesShow(pref);
+      socket.current?.request({ t: "host:phones", d: { showQuestion: pref } }).catch(() => setPhonesShow(shown));
+    }
     switch (s.state.state) {
       case "lobby":
         return setView({ kind: "lobby" });
@@ -166,6 +199,7 @@ export function Host() {
         lastQuestion.current = p.d;
         // A new question starts on a clean screen.
         clearChat();
+        setZoomed(false);
         return setView({ kind: "question", q: p.d, answered: 0, connected: 0 });
       case "question:progress":
         return setView((v) => (v.kind === "question" ? { ...v, answered: p.d.answered, connected: p.d.connected } : v));
@@ -188,6 +222,8 @@ export function Host() {
         return setTheme(asTheme(p.d.theme));
       case "game:chat":
         return setChatMode(asChatMode(p.d.mode));
+      case "game:phones":
+        return setPhonesShow(p.d.showQuestion);
       case "chat:message":
         if (!hiddenRef.current) addChat(p.d);
         return;
@@ -240,6 +276,33 @@ export function Host() {
   const live = view.kind !== "ended" && view.kind !== "error" && view.kind !== "connecting";
   const started = view.kind === "question" && now >= view.q.startsAt;
   const current = view.kind === "question" ? view.q : view.kind === "reveal" ? view.q : null;
+  // The image or code on screen now, if any. The pop-out window keeps the
+  // last one through the leaderboard, so the class can still discuss it.
+  const shownMedia = current && hasMedia(current) ? current : null;
+  const windowQ = current ?? (view.kind === "leaderboard" ? lastQuestion.current : null);
+  useMediaBroadcast(
+    pin,
+    windowQ ? { media: windowQ.media, markdown: windowQ.markdown, text: windowQ.text, index: windowQ.index, total: windowQ.total } : null,
+  );
+  const canZoom = !!shownMedia && (view.kind === "reveal" || started);
+  useEffect(() => {
+    if (!canZoom) {
+      setZoomed(false);
+      return;
+    }
+    // Z enlarges the image or code (Esc closes it), for a host at a laptop
+    // or with a presenter remote that sends keys.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "z" || e.key === "Z") {
+        e.preventDefault();
+        setZoomed((z) => !z);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canZoom]);
+  const zoom = () => setZoomed(true);
 
   const nextButton = (label: string) => (
     <button type="button" className={btn.primary} disabled={busy} onClick={next}>
@@ -302,6 +365,26 @@ export function Host() {
               )
             )}
             <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+              {shownMedia && (
+                <button type="button" className={btn.ghost} onClick={() => openMediaWindow(pin)} title={t("media.popOutHint")}>
+                  {t("media.popOut")} ↗
+                </button>
+              )}
+              <button
+                type="button"
+                className={btn.ghost}
+                aria-pressed={!phonesShow}
+                title={t("game.phones.hint")}
+                onClick={() => {
+                  const show = !phonesShow;
+                  savePhonesPreference(show);
+                  setPhonesShow(show);
+                  void act({ t: "host:phones", d: { showQuestion: show } });
+                }}
+              >
+                <PhoneIcon />
+                {phonesShow ? t("game.phones.hide") : t("game.phones.show")}
+              </button>
               <ChatModePicker value={chatMode} onChange={(m) => act({ t: "host:chat", d: { mode: m } })} />
               {chatMode !== "off" && (
                 <button
@@ -426,23 +509,32 @@ export function Host() {
         ) : (
           <div className="flex w-full flex-1 flex-col gap-5">
             <QuestionText>{view.q.text}</QuestionText>
-            <div className={`grid grid-cols-[1fr_auto_1fr] items-center gap-4 sm:gap-8 ${view.q.media ? "flex-1" : ""}`}>
+            <div className={`grid items-center gap-4 sm:gap-8 ${shownMedia ? "flex-1 grid-cols-[auto_minmax(0,1fr)_auto]" : "grid-cols-[1fr_auto_1fr]"}`}>
               <div className="flex justify-start">
                 <Countdown large seconds={secondsLeft(view.q.endsAt, now)} fraction={timeFraction(view.q, now)} />
               </div>
-              {view.q.media ? <img src={view.q.media} alt="" className="max-h-[38vh] min-w-0 rounded-2xl object-contain border-[3px] border-ink bg-white" /> : <span />}
+              {shownMedia ? <QuestionMedia value={shownMedia} maxClass="max-h-[42vh]" onZoom={zoom} /> : <span />}
               <p className="justify-self-end rounded-2xl border-[3px] border-ink bg-white px-4 py-3 text-xl font-black tabular-nums sm:text-2xl" aria-live="polite">
                 {t("game.answered", { answered: view.answered, connected: view.connected })}
               </p>
             </div>
-            <OptionGrid q={view.q} fill={!view.q.media} />
+            <OptionGrid q={view.q} fill={!shownMedia} />
           </div>
         ))}
 
       {view.kind === "reveal" && (
         <div className="flex w-full flex-1 flex-col justify-center gap-6">
           {view.q && <QuestionText>{view.q.text}</QuestionText>}
-          <RevealView q={view.q} reveal={view.reveal} />
+          {shownMedia ? (
+            // The image or code stays up beside the answers, so the class
+            // can talk through why the answer is right.
+            <div className="grid w-full items-center gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <QuestionMedia value={shownMedia} maxClass="max-h-[55vh]" onZoom={zoom} />
+              <RevealView q={view.q} reveal={view.reveal} stacked />
+            </div>
+          ) : (
+            <RevealView q={view.q} reveal={view.reveal} />
+          )}
         </div>
       )}
 
@@ -476,6 +568,7 @@ export function Host() {
         </div>
       )}
     </Stage>
+    {zoomed && shownMedia && <MediaZoom value={shownMedia} onClose={() => setZoomed(false)} onPopOut={() => openMediaWindow(pin)} />}
     </ThemeContext.Provider>
   );
 }
@@ -503,6 +596,14 @@ function ThemePicker({ value, disabled, onChange }: { value: Theme; disabled: bo
   );
 }
 
+function PhoneIcon() {
+  return (
+    <svg aria-hidden viewBox="0 0 20 20" fill="currentColor" className="mr-1.5 h-[1.1em] w-[1.1em] opacity-70">
+      <path d="M6 1.5h8A1.5 1.5 0 0 1 15.5 3v14a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 17V3A1.5 1.5 0 0 1 6 1.5Zm1 2v11h6v-11H7Zm3 12.25a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Z" />
+    </svg>
+  );
+}
+
 function PersonIcon() {
   return (
     <svg aria-hidden viewBox="0 0 20 20" fill="currentColor" className="h-[1em] w-[1em] opacity-70">
@@ -522,12 +623,12 @@ function QuestionText({ children }: { children: ReactNode }) {
  * The options as tiles. With `counts`, each tile also shows how many players
  * chose it, and the wrong ones step back.
  */
-function OptionGrid({ q, correct, counts, fill }: { q: QuestionStart; correct?: number[]; counts?: Map<number, number>; fill?: boolean }) {
+function OptionGrid({ q, correct, counts, fill, stacked }: { q: QuestionStart; correct?: number[]; counts?: Map<number, number>; fill?: boolean; stacked?: boolean }) {
   const { t } = useTranslation();
   if (q.type === "fill_blank") return null;
   const max = counts ? Math.max(1, ...counts.values()) : 1;
   return (
-    <ul className={`grid w-full grid-cols-1 gap-3 sm:grid-cols-2 ${fill ? "flex-1 auto-rows-fr" : ""}`} aria-label={counts ? t("game.distribution") : undefined}>
+    <ul className={`grid w-full grid-cols-1 gap-3 ${stacked ? "" : "sm:grid-cols-2"} ${fill ? "flex-1 auto-rows-fr" : ""}`} aria-label={counts ? t("game.distribution") : undefined}>
       {q.options.map((o, i) => {
         const right = correct?.includes(o.id);
         const n = counts?.get(o.id) ?? 0;
@@ -560,7 +661,7 @@ function OptionGrid({ q, correct, counts, fill }: { q: QuestionStart; correct?: 
   );
 }
 
-function RevealView({ q, reveal }: { q: QuestionStart | null; reveal: QuestionReveal }) {
+function RevealView({ q, reveal, stacked }: { q: QuestionStart | null; reveal: QuestionReveal; stacked?: boolean }) {
   const { t } = useTranslation();
   if (reveal.acceptedAnswers.length > 0 || q?.type === "fill_blank") {
     return (
@@ -585,5 +686,5 @@ function RevealView({ q, reveal }: { q: QuestionStart | null; reveal: QuestionRe
   if (!q) return null;
   const counts = new Map(q.options.map((o) => [o.id, 0]));
   for (const d of reveal.distribution) counts.set(d.optionId, d.count);
-  return <OptionGrid q={q} correct={reveal.correctOptionIds} counts={counts} />;
+  return <OptionGrid q={q} correct={reveal.correctOptionIds} counts={counts} stacked={stacked} />;
 }

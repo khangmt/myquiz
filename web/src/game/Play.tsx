@@ -15,6 +15,7 @@ import { Badge, Big, btn, Chip, Countdown, Logo, Muted, Notice, optionStyle, out
 import { asTheme, Avatar, AvatarPicker, randomAvatar, ThemeContext, type Theme } from "./avatars";
 import { secondsLeft, useTicker } from "./useCountdown";
 import { asChatMode, ChatBar, type ChatMode } from "./chat";
+import { hasMedia, MediaZoom, QuestionMedia } from "../media/QuestionMedia";
 
 const DEVICE_KEY = "myquiz.device";
 const AVATAR_KEY = "myquiz.avatar";
@@ -192,6 +193,10 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
   const [me, setMe] = useState<{ nickname: string; avatar: string; score: number; rank: number } | null>(null);
   const [theme, setTheme] = useState<Theme>("cute");
   const [chatMode, setChatMode] = useState<ChatMode>("open");
+  // The host decides whether phones show the question and its image/code
+  // or only the answer buttons.
+  const [showQuestion, setShowQuestion] = useState(true);
+  const [zoomed, setZoomed] = useState(false);
   const [muted, setMuted] = useState(false);
   const [status, setStatus] = useState<SocketStatus>("connecting");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -205,6 +210,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
     if (s.me) setMe({ nickname: s.me.nickname, avatar: s.me.avatar, score: s.me.score, rank: s.me.rank });
     setTheme(asTheme(s.theme));
     setChatMode(asChatMode(s.chat));
+    setShowQuestion(s.phonesShowQuestion !== false);
     setMuted(!!s.me?.muted);
     if (s.question) lastQuestion.current = s.question;
     switch (s.state.state) {
@@ -230,6 +236,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
       case "question:start":
         setSubmitError(null);
         lastQuestion.current = p.d;
+        setZoomed(false);
         return setView({ kind: "question", q: p.d, sent: false });
       case "question:result":
         setMe((m) => (m ? { ...m, score: p.d.total, rank: p.d.rank } : m));
@@ -248,6 +255,8 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
         return setTheme(asTheme(p.d.theme));
       case "game:chat":
         return setChatMode(asChatMode(p.d.mode));
+      case "game:phones":
+        return setShowQuestion(p.d.showQuestion);
       case "player:muted":
         return setMuted(p.d.muted);
       case "player:kicked":
@@ -315,6 +324,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
   }
 
   const playing = view.kind === "question" && now >= view.q.startsAt && !view.sent && now < view.q.endsAt;
+  const phoneMedia = playing && showQuestion && view.kind === "question" && hasMedia(view.q) ? view.q : null;
   const tone: Tone | undefined = view.kind === "result" ? (view.r.correct ? "correct" : view.r.answered ? "wrong" : "missed") : undefined;
   const over = view.kind === "ended" || view.kind === "banned";
   // Chat stays out of the way while a player is still answering: it shows
@@ -370,7 +380,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
         (now < view.q.startsAt ? (
           <>
             <Chip>{t("game.questionOf", { n: view.q.index + 1, total: view.q.total })}</Chip>
-            <Big>{view.q.text}</Big>
+            {showQuestion ? <Big>{view.q.text}</Big> : <Muted>{t("game.phones.lookUp")}</Muted>}
             <Muted>{t("game.getReady", { s: secondsLeft(view.q.startsAt, now) })}</Muted>
           </>
         ) : view.sent ? (
@@ -390,8 +400,13 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
         <div className="flex w-full flex-1 flex-col gap-4 self-stretch">
           <div className={`${panel} flex items-center gap-4 p-3 text-left`}>
             <Countdown seconds={secondsLeft(view.q.endsAt, now)} fraction={timeFraction(view.q, now)} />
-            <p className="min-w-0 flex-1 text-lg font-bold leading-snug">{view.q.text}</p>
+            {showQuestion ? (
+              <p className="min-w-0 flex-1 text-lg font-bold leading-snug">{view.q.text}</p>
+            ) : (
+              <p className="min-w-0 flex-1 font-semibold text-ink/70">{t("game.phones.lookUp")}</p>
+            )}
           </div>
+          {phoneMedia && <QuestionMedia value={phoneMedia} maxClass="max-h-[32vh]" codeClass="md-phone" fit={[11, 16]} onZoom={() => setZoomed(true)} />}
           <AnswerPad q={view.q} onSubmit={(ids, text) => submit(view.q, ids, text)} />
         </div>
       )}
@@ -448,6 +463,7 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
         </>
       )}
     </Stage>
+    {zoomed && phoneMedia && <MediaZoom value={phoneMedia} onClose={() => setZoomed(false)} />}
     </ThemeContext.Provider>
   );
 }

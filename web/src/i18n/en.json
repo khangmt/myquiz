@@ -97,7 +97,8 @@
     "MISSING_IMAGE": "An image named in quiz.json is missing.",
     "NOT_AN_IMAGE": "Not a JPG, PNG or WebP image.",
     "IMAGE_TOO_BIG": "The image dimensions are too large.",
-    "BAD_IMAGE_PATH": "The image path is not valid."
+    "BAD_IMAGE_PATH": "The image path is not valid.",
+    "MARKDOWN_LENGTH": "The code/Markdown block must be at most 4000 characters."
   },
   "errors": {
     "INTERNAL": "Something went wrong. Please try again.",
@@ -183,7 +184,15 @@
     "ignoreDiacritics": "Accept answers typed without accents (\"ha noi\" matches \"Hà Nội\")",
     "true": "True",
     "false": "False",
-    "confirmDeleteQuestion": "Delete question {{n}}?"
+    "confirmDeleteQuestion": "Delete question {{n}}?",
+    "media": {
+      "label": "Show with the question:",
+      "image": "Image",
+      "code": "Code / Markdown",
+      "codeHint": "Markdown. Put code between ```c and ``` lines to colour it.",
+      "preview": "Preview",
+      "empty": "Nothing yet. Type code or text on the left."
+    }
   },
   "game": {
     "reconnecting": "Connection lost, reconnecting…",
@@ -327,6 +336,12 @@
       "allow": "Let them in",
       "ignore": "Ignore"
     },
+    "phones": {
+      "hide": "Answers only on phones",
+      "show": "Question on phones",
+      "hint": "Choose whether players’ phones show the question and its image/code, or only the answer buttons.",
+      "lookUp": "Look at the main screen for the question."
+    },
     "players": {
       "title": "Manage players",
       "menuFor": "Options for {{name}}",
@@ -419,5 +434,19 @@
     "banner_other": "{{count}} quizzes will be deleted in {{days}} day(s):",
     "howToKeep": "Edit it, host a game with it, or download the zip to keep it.",
     "dismiss": "Hide for today"
+  },
+  "media": {
+    "enlarge": "Enlarge",
+    "enlargeHint": "Enlarge (Z)",
+    "enlarged": "Enlarged image or code",
+    "zoomIn": "Zoom in (+)",
+    "zoomOut": "Zoom out (−)",
+    "fit": "Fit to screen (0)",
+    "popOut": "New window",
+    "popOutHint": "Open the image or code in its own window, e.g. for a second screen. It follows the game.",
+    "close": "Close (Esc)",
+    "windowTitle": "Question media",
+    "windowConnecting": "Waiting for the host screen… Keep the game open in the other tab.",
+    "windowEmpty": "The image or code of the current question shows here."
   }
 }

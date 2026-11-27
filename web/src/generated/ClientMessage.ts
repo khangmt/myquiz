@@ -8,6 +8,7 @@ import type { HostKick } from "./HostKick";
 import type { HostLock } from "./HostLock";
 import type { HostMute } from "./HostMute";
 import type { HostNext } from "./HostNext";
+import type { HostPhones } from "./HostPhones";
 import type { HostRejoin } from "./HostRejoin";
 import type { HostSkip } from "./HostSkip";
 import type { HostTheme } from "./HostTheme";
@@ -19,4 +20,4 @@ import type { TimePing } from "./TimePing";
 /**
  * Everything a client may send.
  */
-export type ClientMessage = { "t": "host:attach", "d": HostAttach } | { "t": "host:lock", "d": HostLock } | { "t": "host:theme", "d": HostTheme } | { "t": "host:kick", "d": HostKick } | { "t": "host:ban", "d": HostBan } | { "t": "host:mute", "d": HostMute } | { "t": "host:rejoin", "d": HostRejoin } | { "t": "host:start", "d": Empty } | { "t": "host:next", "d": HostNext } | { "t": "host:skip", "d": HostSkip } | { "t": "host:end", "d": Empty } | { "t": "host:chat", "d": HostChat } | { "t": "player:join", "d": PlayerJoin } | { "t": "player:resume", "d": PlayerResume } | { "t": "answer:submit", "d": AnswerSubmit } | { "t": "player:chat", "d": PlayerChat } | { "t": "time:ping", "d": TimePing };
+export type ClientMessage = { "t": "host:attach", "d": HostAttach } | { "t": "host:lock", "d": HostLock } | { "t": "host:theme", "d": HostTheme } | { "t": "host:kick", "d": HostKick } | { "t": "host:ban", "d": HostBan } | { "t": "host:mute", "d": HostMute } | { "t": "host:rejoin", "d": HostRejoin } | { "t": "host:start", "d": Empty } | { "t": "host:next", "d": HostNext } | { "t": "host:skip", "d": HostSkip } | { "t": "host:end", "d": Empty } | { "t": "host:chat", "d": HostChat } | { "t": "host:phones", "d": HostPhones } | { "t": "player:join", "d": PlayerJoin } | { "t": "player:resume", "d": PlayerResume } | { "t": "answer:submit", "d": AnswerSubmit } | { "t": "player:chat", "d": PlayerChat } | { "t": "time:ping", "d": TimePing };

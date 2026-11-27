@@ -70,7 +70,7 @@ pub fn file_name(title: &str, yyyymmdd: &str) -> String {
 }
 
 /// The downloadable example for `GET /quiz-template.zip`: one question of
-/// each type, no images.
+/// each type, plus one that shows code, no images.
 pub fn template() -> QuizFileV1 {
     use myquiz_engine::QuestionKind as K;
     let q = |kind, text: &str, options: Vec<(&str, bool)>, accepted: Vec<&str>| QuestionV1 {
@@ -78,6 +78,7 @@ pub fn template() -> QuizFileV1 {
         text: text.into(),
         image: None,
         image_alt: None,
+        markdown: None,
         time_limit_s: kind.default_time_limit_s(),
         points: 1000,
         options: options
@@ -124,11 +125,33 @@ pub fn template() -> QuizFileV1 {
                     vec![],
                     vec!["Hà Nội", "Hanoi"],
                 ),
+                QuestionV1 {
+                    markdown: Some(TEMPLATE_CODE.into()),
+                    ..q(
+                        K::Single,
+                        "Chương trình in ra gì? / What does this program print?",
+                        vec![("3", false), ("6", true), ("123", false)],
+                        vec![],
+                    )
+                },
             ],
         },
         None,
     )
 }
+
+/// The template's code question: Markdown with a fenced C block.
+const TEMPLATE_CODE: &str = "```c
+#include <stdio.h>
+
+int main(void) {
+    int a[] = {1, 2, 3};
+    int sum = 0;
+    for (int i = 0; i < 3; i++) sum += a[i];
+    printf(\"%d\\n\", sum);
+    return 0;
+}
+```";
 
 #[cfg(test)]
 mod tests {

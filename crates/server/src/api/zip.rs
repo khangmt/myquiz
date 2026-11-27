@@ -171,6 +171,7 @@ pub async fn download(
                 .as_ref()
                 .and_then(|m| alts.get(m).cloned().flatten()),
             image,
+            markdown: q.markdown.clone().filter(|m| !m.trim().is_empty()),
             time_limit_s: q.time_limit_s,
             points: q.points,
             options: q
@@ -409,6 +410,7 @@ pub async fn import(
                     text: q.text.clone(),
                     media_id: q.image.as_ref().and_then(|p| ids.get(p).cloned()),
                     media_url: None,
+                    markdown: q.markdown.clone(),
                     time_limit_s: q.time_limit_s,
                     points: q.points,
                     options: q

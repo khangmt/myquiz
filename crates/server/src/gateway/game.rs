@@ -182,6 +182,7 @@ impl GameService {
             locked: meta.locked,
             theme: meta.theme.clone(),
             chat: meta.chat.clone(),
+            phones_show_question: meta.phones_show_question,
             players: lobby_list(&players),
             question,
             report_id: for_host.then(|| meta.session.clone()),
@@ -243,6 +244,16 @@ impl GameService {
             .to_all(pin, &ServerPush::GameChat(GameChat { mode: mode.into() }))
             .await?;
         Ok(Ok(()))
+    }
+
+    /// `host:phones`: whether phones show the question and its image/code
+    /// or only the answer buttons, at any point of the game. Players still
+    /// receive the question either way; this only changes what they draw.
+    pub async fn set_phones(&self, pin: &str, show_question: bool) -> Result<()> {
+        self.store.set_phones(pin, show_question).await?;
+        self.hub
+            .to_all(pin, &ServerPush::GamePhones(GamePhones { show_question }))
+            .await
     }
 
     pub async fn lock(&self, pin: &str, locked: bool) -> Result<()> {
