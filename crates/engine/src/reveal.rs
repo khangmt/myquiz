@@ -12,6 +12,9 @@ use crate::scoring::points;
 
 /// How many distinct typed answers the host screen shows for fill-in-the-blank.
 pub const TOP_TEXT_ANSWERS: usize = 5;
+/// Shown on the host screen in place of a typed answer that fails the
+/// word filter.
+pub const HIDDEN_TEXT: &str = "•••";
 
 /// An answer as stored by the Redis answer script.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -111,7 +114,7 @@ fn top_texts<P>(question: &Question, answers: &[StoredAnswer<P>]) -> Vec<TextCou
             }
         }
     }
-    let mut list: Vec<TextCount> = counts
+    let list: Vec<TextCount> = counts
         .into_iter()
         .map(|(text, count)| {
             let correct = is_correct(
@@ -121,6 +124,13 @@ fn top_texts<P>(question: &Question, answers: &[StoredAnswer<P>]) -> Vec<TextCou
                     text: Some(text.clone()),
                 },
             );
+            // The host screen is on a classroom projector: hide rude typed
+            // answers (never a correct one). The report keeps what was typed.
+            let text = if !correct && crate::profanity::is_offensive(&text) {
+                HIDDEN_TEXT.to_string()
+            } else {
+                text
+            };
             TextCount {
                 text,
                 count,
@@ -128,6 +138,18 @@ fn top_texts<P>(question: &Question, answers: &[StoredAnswer<P>]) -> Vec<TextCou
             }
         })
         .collect();
+    // Several hidden answers show as one entry.
+    let mut merged: Vec<TextCount> = Vec::with_capacity(list.len());
+    for t in list {
+        match merged
+            .iter_mut()
+            .find(|m| m.text == t.text && m.correct == t.correct)
+        {
+            Some(m) => m.count += t.count,
+            None => merged.push(t),
+        }
+    }
+    let mut list = merged;
     // Most common first; ties alphabetical (BTreeMap order, stable sort).
     list.sort_by_key(|t| std::cmp::Reverse(t.count));
     list.truncate(TOP_TEXT_ANSWERS);
@@ -237,6 +259,25 @@ mod tests {
         );
         // 30 s limit: 1 s → round(1000 × (1 − 1/60)) = 983
         assert_eq!(out.results[0].points, 983);
+    }
+
+    #[test]
+    fn rude_typed_answers_are_hidden_from_the_projector() {
+        let out = score_question(
+            &fill_blank(),
+            &[
+                ans("a", &[], Some("Hà Nội"), 1_000),
+                ans("b", &[], Some("đm"), 1_000),
+                ans("c", &[], Some("fuck"), 1_000),
+                ans("d", &[], Some("Huế"), 1_000),
+            ],
+        );
+        let top: Vec<_> = out
+            .top_text_answers
+            .iter()
+            .map(|t| (t.text.as_str(), t.count))
+            .collect();
+        assert_eq!(top, [(HIDDEN_TEXT, 2), ("huế", 1), ("hà nội", 1)]);
     }
 
     #[test]

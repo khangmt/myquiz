@@ -67,6 +67,8 @@ pub enum ClientMessage {
     HostTheme(HostTheme),
     #[serde(rename = "host:kick")]
     HostKick(HostKick),
+    #[serde(rename = "host:rejoin")]
+    HostRejoin(HostRejoin),
     #[serde(rename = "host:start")]
     HostStart(Empty),
     #[serde(rename = "host:next")]
@@ -96,6 +98,8 @@ wire! {
     /// The game's look, one of [`THEMES`]; only while in the lobby.
     pub struct HostTheme { pub theme: String }
     pub struct HostKick { pub player_id: String }
+    /// Lets a player back in under their name from a new device.
+    pub struct HostRejoin { pub player_id: String }
     pub struct HostNext { pub expect: GameState }
     pub struct HostSkip { pub index: usize }
 
@@ -205,6 +209,9 @@ wire! {
 
     pub struct GameEnded { pub reason: EndReason }
     pub struct GameTheme { pub theme: String }
+    /// To the host: someone on a new device asks to continue as this
+    /// (offline) player. Sent again on each of their retries.
+    pub struct RejoinRequest { pub player_id: String, pub nickname: String, pub avatar: String }
     pub struct ErrorPush { pub code: String }
 }
 
@@ -245,6 +252,8 @@ pub enum ServerPush {
     GameEnded(GameEnded),
     #[serde(rename = "game:theme")]
     GameTheme(GameTheme),
+    #[serde(rename = "rejoin:request")]
+    RejoinRequest(RejoinRequest),
     #[serde(rename = "error")]
     Error(ErrorPush),
 }

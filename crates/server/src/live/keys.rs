@@ -35,3 +35,11 @@ pub fn online(pin: &str) -> String {
 pub fn login_session(sid: &str) -> String {
     format!("session:{sid}")
 }
+/// Player id to the device asking to take that player's name back.
+pub fn rejoin(pin: &str) -> String {
+    format!("game:{pin}:rejoin")
+}
+/// Player id to the device the host let back in under that name.
+pub fn rejoin_ok(pin: &str) -> String {
+    format!("game:{pin}:rejoin:ok")
+}

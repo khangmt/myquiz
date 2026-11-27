@@ -2,12 +2,13 @@
 //! PostgreSQL and Redis. Skipped unless DATABASE_URL and REDIS_URL are set.
 
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Duration;
 
 use fred::prelude::*;
 use futures_util::{SinkExt, StreamExt};
 use myquiz_engine::quiz::AnswerOption;
-use myquiz_engine::{Question, QuestionKind, QuizSnapshot};
+use myquiz_engine::{GameState, Question, QuestionKind, QuizSnapshot};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use tokio::net::TcpStream;
@@ -26,6 +27,7 @@ struct Env {
     db: PgPool,
     redis: Pool,
     store: LiveStore,
+    service: Arc<GameService>,
     addr: String,
 }
 
@@ -46,7 +48,7 @@ async fn env() -> Option<Env> {
     let service = GameService::new(store.clone(), db.clone(), hub);
     super::spawn_sweep(service.clone());
     super::spawn_suspended_sweep(service.clone());
-    let app = super::router(service, super::AllowedOrigins::default());
+    let app = super::router(service.clone(), super::AllowedOrigins::default());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap().to_string();
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -54,6 +56,7 @@ async fn env() -> Option<Env> {
         db,
         redis,
         store,
+        service,
         addr,
     })
 }
@@ -477,6 +480,18 @@ async fn three_bots_play_a_full_game() {
     .await;
     let podium = bots[1].push("game:podium").await;
     assert_eq!(podium["top"][0]["nickname"], "An");
+    // Results are saved as soon as the podium shows, in case the host
+    // closes the tab instead of pressing Finish.
+    let (status, rank): (String, Option<i32>) = sqlx::query_as(
+        "SELECT s.status::text, p.final_rank FROM game_sessions s \
+         JOIN session_players p ON p.session_id = s.id \
+         WHERE s.id = $1 AND p.nickname = 'An'",
+    )
+    .bind(session)
+    .fetch_one(&env.db)
+    .await
+    .unwrap();
+    assert_eq!((status.as_str(), rank), ("ended", Some(1)));
     host.ok("host:next", json!({ "expect": { "state": "podium" } }))
         .await;
     let ended = bots[1].push("game:ended").await;
@@ -761,4 +776,110 @@ async fn avatars_and_theme() {
     );
     let snap = host.ok("host:attach", json!({ "pin": pin })).await;
     assert_eq!(snap["theme"], "anime");
+}
+
+async fn wait_offline(store: &LiveStore, pin: &str) {
+    for _ in 0..100 {
+        if store.connected(pin).await.unwrap() == 0 {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("player still online");
+}
+
+/// A student whose phone lost its session gets their name, score and
+/// answers back: by themselves on the same device, with the host's OK on
+/// another one.
+#[tokio::test]
+async fn returning_player_rejoins_from_a_new_device() {
+    let env = env_or_skip!();
+    let (pin, sid, _) = seed_game(&env).await;
+    let mut host = Bot::connect(&env.addr, Some(&sid)).await;
+    host.ok("host:attach", json!({ "pin": pin })).await;
+
+    let mut p = Bot::connect(&env.addr, None).await;
+    let joined = p
+        .ok(
+            "player:join",
+            json!({ "pin": pin, "nickname": "Minh", "deviceId": "dev-old" }),
+        )
+        .await;
+    let id = joined["playerId"].as_str().unwrap().to_string();
+    host.ok("host:lock", json!({ "locked": true })).await;
+    drop(p);
+    wait_offline(&env.store, &pin).await;
+
+    // Same device, storage cleared: back in at once, even though locked.
+    let mut p = Bot::connect(&env.addr, None).await;
+    let again = p
+        .ok(
+            "player:join",
+            json!({ "pin": pin, "nickname": "minh", "deviceId": "dev-old" }),
+        )
+        .await;
+    assert_eq!(again["playerId"], id.as_str());
+    drop(p);
+    wait_offline(&env.store, &pin).await;
+
+    // A new device waits for the host.
+    let mut p = Bot::connect(&env.addr, None).await;
+    let ask = json!({ "pin": pin, "nickname": "Minh", "deviceId": "dev-new" });
+    assert_eq!(p.refused("player:join", ask.clone()).await, "REJOIN_WAIT");
+    let req = host.push("rejoin:request").await;
+    assert_eq!(req["playerId"], id.as_str());
+    assert_eq!(req["nickname"], "Minh");
+    host.ok("host:rejoin", json!({ "playerId": id })).await;
+    let back = p.ok("player:join", ask).await;
+    assert_eq!(back["playerId"], id.as_str());
+    assert_eq!(back["snapshot"]["me"]["nickname"], "Minh");
+}
+
+/// Games the host walked away from stop counting as running.
+#[tokio::test]
+async fn left_behind_games_are_closed() {
+    let env = env_or_skip!();
+    // One whose live state expired, one still live with nobody connected,
+    // one still live with a player connected.
+    let (gone_pin, _, gone) = seed_game(&env).await;
+    let (idle_pin, _, idle) = seed_game(&env).await;
+    let (busy_pin, _, busy) = seed_game(&env).await;
+    let mut p = Bot::connect(&env.addr, None).await;
+    p.ok(
+        "player:join",
+        json!({ "pin": busy_pin, "nickname": "Here", "deviceId": "dev-h" }),
+    )
+    .await;
+    let _: i64 = env.redis.del(keys::game(&gone_pin)).await.unwrap();
+    for s in [gone, idle, busy] {
+        sqlx::query(
+            "UPDATE game_sessions SET created_at = now() - interval '7 hours' WHERE id = $1",
+        )
+        .bind(s)
+        .execute(&env.db)
+        .await
+        .unwrap();
+    }
+
+    env.service.end_stale_games(6).await.unwrap();
+    let status = |id: Uuid| {
+        let db = env.db.clone();
+        async move {
+            sqlx::query_as::<_, (String, Option<String>)>(
+                "SELECT status::text, pin FROM game_sessions WHERE id = $1",
+            )
+            .bind(id)
+            .fetch_one(&db)
+            .await
+            .unwrap()
+        }
+    };
+    assert_eq!(status(gone).await, ("ended".into(), None));
+    assert_eq!(status(idle).await, ("ended".into(), None));
+    assert_eq!(
+        env.store.meta(&idle_pin).await.unwrap().unwrap().state,
+        GameState::Ended
+    );
+    assert_eq!(status(busy).await.0, "lobby");
+    let _ = env.store.finish(&busy_pin).await;
 }
