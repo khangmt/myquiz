@@ -2,8 +2,12 @@
 //!
 //! - `POST /quizzes/:id/export` gives the owner (or an admin) a signed
 //!   download link valid 10 minutes; `GET /exports/:token` serves the zip.
-//! - `POST /quizzes/import` turns an uploaded zip into a new private draft.
-//! - `GET /quiz-template.zip` is a sample to start from.
+//!   With `?format=yaml` the quiz is written as YAML instead: a plain
+//!   `.yaml` file when it has no images, else a zip holding `quiz.yaml`.
+//! - `POST /quizzes/import` turns an uploaded zip, or a `.yaml`/`.yml`
+//!   file, into a new private draft.
+//! - `GET /quiz-template.zip` and `GET /quiz-template.yaml` are samples to
+//!   start from.
 //!
 //! Zips are built and read in a temporary file, never fully in memory.
 
@@ -11,16 +15,17 @@ use std::collections::BTreeMap;
 use std::io::{Seek, SeekFrom};
 
 use axum::body::Body;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use myquiz_bundle::format::{OptionV1, QuestionV1, QuizFileV1, QuizV1};
-use myquiz_bundle::{read_bundle, Limits, Problem};
+use myquiz_bundle::{read_bundle, read_yaml, Limits, Manifest, Problem};
 use myquiz_protocol::quiz::{
     ExportLink, ImportProblem, ImportRefused, Imported, QuestionDoc, SaveQuiz,
 };
 use myquiz_protocol::ApiErrorBody;
+use serde::Deserialize;
 use serde_json::json;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
@@ -55,6 +60,22 @@ fn zip_response(file: std::fs::File, name: &str) -> ApiResult<Response> {
     Ok(res)
 }
 
+/// A plain YAML quiz as a download.
+fn yaml_response(yaml: String, name: &str) -> ApiResult<Response> {
+    let mut res = yaml.into_response();
+    let h = res.headers_mut();
+    h.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/yaml; charset=utf-8"),
+    );
+    h.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{name}\""))?,
+    );
+    h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    Ok(res)
+}
+
 fn today_yyyymmdd() -> String {
     let d = time::OffsetDateTime::now_utc().date();
     format!("{:04}{:02}{:02}", d.year(), u8::from(d.month()), d.day())
@@ -63,14 +84,33 @@ fn today_yyyymmdd() -> String {
 // ---------------------------------------------------------------------------
 // Export
 
-/// `POST /quizzes/:id/export`. Refused with 422 QUIZ_INVALID when the quiz
-/// would not import again (the zip must always be uploadable back).
+#[derive(Debug, Default, Deserialize)]
+pub struct ExportQuery {
+    /// `zip` (default, quiz.json inside) or `yaml`.
+    #[serde(default)]
+    format: Option<String>,
+}
+
+/// `POST /quizzes/:id/export[?format=yaml]`. Refused with 422 QUIZ_INVALID
+/// when the quiz would not import again (a download must always be
+/// uploadable back).
 pub async fn export(
     State(state): State<ApiState>,
     user: AuthUser,
     Path(id): Path<String>,
+    Query(q): Query<ExportQuery>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
+    let yaml = match q.format.as_deref() {
+        None | Some("zip") | Some("json") => false,
+        Some("yaml") => true,
+        Some(_) => {
+            return Err(AppError::bad_request(
+                "BAD_FORMAT",
+                "format must be zip or yaml",
+            ))
+        }
+    };
     let id: Uuid = id
         .parse()
         .map_err(|_| AppError::not_found("QUIZ_NOT_FOUND"))?;
@@ -87,7 +127,12 @@ pub async fn export(
         };
         return Ok((StatusCode::UNPROCESSABLE_ENTITY, Json(body)).into_response());
     }
-    let (token, exp) = signed::sign(&state.auth.app_secret, &format!("quiz:{id}"));
+    let subject = if yaml {
+        format!("quiz:{id}:yaml")
+    } else {
+        format!("quiz:{id}")
+    };
+    let (token, exp) = signed::sign(&state.auth.app_secret, &subject);
     audit(
         &state.app.db,
         &state.auth.app_secret,
@@ -97,7 +142,7 @@ pub async fn export(
             action: "quiz_exported",
             target_type: Some("quiz"),
             target_id: Some(id.to_string()),
-            details: json!({ "title": row.title }),
+            details: json!({ "title": row.title, "format": if yaml { "yaml" } else { "zip" } }),
         },
     )
     .await;
@@ -126,10 +171,13 @@ pub async fn download(
     if let Some(res) = super::reports::serve(&state.app.db, &subject).await? {
         return Ok(res);
     }
-    let id: Uuid = subject
-        .strip_prefix("quiz:")
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(gone)?;
+    let rest = subject.strip_prefix("quiz:").ok_or_else(gone)?;
+    let (id, manifest) = match rest.split_once(':') {
+        Some((id, "yaml")) => (id, Manifest::Yaml),
+        Some(_) => return Err(gone()),
+        None => (rest, Manifest::Json),
+    };
+    let id: Uuid = id.parse().map_err(|_| gone())?;
 
     #[allow(clippy::type_complexity)]
     let row: Option<(String, String, Option<String>, Option<String>)> = sqlx::query_as(
@@ -196,6 +244,15 @@ pub async fn download(
         Some(rfc3339(time::OffsetDateTime::now_utc())),
     );
 
+    let date = today_yyyymmdd();
+    // Without images, YAML needs no zip around it: one readable text file.
+    if manifest == Manifest::Yaml && images.is_empty() {
+        return yaml_response(
+            myquiz_bundle::to_yaml(&file),
+            &myquiz_bundle::file_name_ext(&title, &date, "yaml"),
+        );
+    }
+
     let dir = state.media_dir.clone();
     let zip = tokio::task::spawn_blocking(move || -> anyhow::Result<std::fs::File> {
         let tmp = tempfile::tempfile()?;
@@ -206,12 +263,12 @@ pub async fn download(
                 .ok()
                 .map(|bytes| (path, bytes))
         });
-        let mut tmp = myquiz_bundle::write_bundle(tmp, &file, entries)?;
+        let mut tmp = myquiz_bundle::write_bundle_as(tmp, &file, entries, manifest)?;
         tmp.seek(SeekFrom::Start(0))?;
         Ok(tmp)
     })
     .await??;
-    zip_response(zip, &myquiz_bundle::file_name(&title, &today_yyyymmdd()))
+    zip_response(zip, &myquiz_bundle::file_name(&title, &date))
 }
 
 async fn media_alts(
@@ -248,6 +305,14 @@ pub async fn template() -> ApiResult<Response> {
     zip_response(zip, "myquiz-template.zip")
 }
 
+/// `GET /quiz-template.yaml`: the same sample as one YAML file.
+pub async fn template_yaml() -> ApiResult<Response> {
+    yaml_response(
+        myquiz_bundle::to_yaml(&myquiz_bundle::template()),
+        "myquiz-template.yaml",
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Import
 
@@ -255,7 +320,7 @@ fn refused(status: StatusCode, code: &str, problems: Vec<Problem>) -> Response {
     let body = ImportRefused {
         error: ApiErrorBody {
             code: code.into(),
-            message: "the zip cannot be imported".into(),
+            message: "the file cannot be imported".into(),
         },
         errors: problems
             .into_iter()
@@ -270,8 +335,9 @@ fn refused(status: StatusCode, code: &str, problems: Vec<Problem>) -> Response {
     (status, Json(body)).into_response()
 }
 
-/// `POST /quizzes/import` (multipart, field `file`). 201 `{ quizId }`, or
-/// 422 with every problem found; nothing is saved unless all of it is.
+/// `POST /quizzes/import` (multipart, field `file`: a quiz zip, or a
+/// `.yaml`/`.yml` file). 201 `{ quizId }`, or 422 with every problem found;
+/// nothing is saved unless all of it is.
 pub async fn import(
     State(state): State<ApiState>,
     user: AuthUser,
@@ -298,10 +364,15 @@ pub async fn import(
     // end, so it has to be on disk before it can be read.
     let bad_form = || AppError::bad_request("BAD_UPLOAD", "send a multipart form with a file");
     let mut saved: Option<std::fs::File> = None;
+    let mut is_yaml = false;
     while let Some(mut field) = form.next_field().await.map_err(|_| bad_form())? {
         if field.name() != Some("file") {
             continue;
         }
+        is_yaml = field.file_name().is_some_and(|n| {
+            let n = n.to_ascii_lowercase();
+            n.ends_with(".yaml") || n.ends_with(".yml")
+        });
         let mut tmp = tokio::fs::File::from_std(tempfile::tempfile()?);
         let mut written = 0usize;
         while let Some(chunk) = field.chunk().await.map_err(|_| bad_form())? {
@@ -321,7 +392,30 @@ pub async fn import(
     let mut file = saved.ok_or_else(bad_form)?;
     file.seek(SeekFrom::Start(0))?;
 
-    let bundle = tokio::task::spawn_blocking(move || read_bundle(file, &Limits::default())).await?;
+    let bundle = tokio::task::spawn_blocking(move || {
+        let limits = Limits::default();
+        if is_yaml {
+            // Read one byte past the limit so read_yaml can refuse it.
+            let mut raw = Vec::new();
+            std::io::Read::read_to_end(
+                &mut std::io::Read::take(file, limits.max_quiz_json + 1),
+                &mut raw,
+            )
+            .map_err(|e| {
+                vec![Problem {
+                    file: "quiz.yaml".into(),
+                    question: None,
+                    field: None,
+                    problem: "INVALID_YAML".into(),
+                    detail: Some(e.to_string()),
+                }]
+            })?;
+            read_yaml(&raw, &limits)
+        } else {
+            read_bundle(file, &limits)
+        }
+    })
+    .await?;
     let bundle = match bundle {
         Ok(b) => b,
         Err(problems) => {

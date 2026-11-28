@@ -71,12 +71,13 @@ export function QuizList() {
     onError: fail,
   });
   const download = useMutation({
-    mutationFn: (q: QuizSummary) => api<ExportLink>(`/quizzes/${q.id}/export`, { method: "POST" }),
+    mutationFn: ({ q, format }: { q: QuizSummary; format: "zip" | "yaml" }) =>
+      api<ExportLink>(`/quizzes/${q.id}/export${format === "yaml" ? "?format=yaml" : ""}`, { method: "POST" }),
     onSuccess: (link) => {
       setNotice(null);
       window.location.assign(link.url);
     },
-    onError: (e, q) => {
+    onError: (e, { q }) => {
       if (e instanceof ApiFailure && e.code === "QUIZ_INVALID") {
         const problems = (e.body as { problems?: QuizProblemDoc[] }).problems ?? [];
         setNotice({ kind: "exportErrors", title: q.title, problems });
@@ -138,7 +139,7 @@ export function QuizList() {
         <input
           ref={fileInput}
           type="file"
-          accept=".zip,application/zip"
+          accept=".zip,application/zip,.yaml,.yml"
           className="hidden"
           data-testid="zip-input"
           onChange={(e) => {
@@ -161,6 +162,9 @@ export function QuizList() {
         {t("quizzes.retention")}{" "}
         <a className="underline" href="/api/v1/quiz-template.zip">
           {t("quizzes.template")}
+        </a>{" "}
+        <a className="underline" href="/api/v1/quiz-template.yaml">
+          {t("quizzes.templateYaml")}
         </a>
       </p>
 
@@ -228,8 +232,16 @@ export function QuizList() {
                 >
                   {host.isPending && host.variables?.id === q.id ? t("quizzes.hosting") : t("quizzes.host")}
                 </button>
-                <button type="button" className="underline" onClick={() => download.mutate(q)}>
+                <button type="button" className="underline" onClick={() => download.mutate({ q, format: "zip" })}>
                   {t("quizzes.download")}
+                </button>
+                <button
+                  type="button"
+                  className="underline"
+                  title={t("quizzes.downloadYamlHint")}
+                  onClick={() => download.mutate({ q, format: "yaml" })}
+                >
+                  {t("quizzes.downloadYaml")}
                 </button>
                 <button type="button" className="underline" onClick={() => duplicate.mutate(q.id)}>
                   {t("quizzes.duplicate")}

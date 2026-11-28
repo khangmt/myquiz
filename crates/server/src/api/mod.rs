@@ -140,6 +140,7 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/sessions/{id}/exports", post(reports::export))
         .route("/quiz-template.zip", get(zip::template))
+        .route("/quiz-template.yaml", get(zip::template_yaml))
         // SEC-21: 1 MB for everything but uploads.
         .layer(RequestBodyLimitLayer::new(1024 * 1024));
     let uploads = Router::new()

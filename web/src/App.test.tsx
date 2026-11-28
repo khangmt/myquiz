@@ -93,9 +93,47 @@ test("a refused zip shows every problem in the user's language", async () => {
   fireEvent.change(input, { target: { files: [new File(["x"], "quiz.zip")] } });
   const alert = await screen.findByRole("alert");
   expect(alert.textContent).toContain("quiz.json · câu 2: Thời gian phải từ 5 đến 240 giây.");
-  expect(alert.textContent).toContain("media/q2.png: Thiếu ảnh được nhắc tới trong quiz.json.");
+  expect(alert.textContent).toContain("media/q2.png: Thiếu ảnh được nhắc tới trong tệp câu hỏi.");
   const upload = calls.find((c) => c.url === "/api/v1/quizzes/import")!;
   expect((upload.init!.headers as Record<string, string>)["X-CSRF-Token"]).toBe("csrf-1");
+});
+
+test("a quiz downloads as YAML and YAML files can be imported", async () => {
+  const calls = mockFetch((url, init) => {
+    if (url === "/api/v1/me") return { status: 200, body: ME };
+    if (url.startsWith("/api/v1/quizzes?"))
+      return {
+        status: 200,
+        body: {
+          items: [
+            { id: "q1", title: "Mảng", status: "draft", visibility: "private", questionCount: 3, updatedAt: "2026-11-28T00:00:00Z", expiresAt: "2026-12-19T00:00:00Z" },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+        },
+      };
+    if (url.startsWith("/api/v1/quizzes/q1/export") && init?.method === "POST")
+      return { status: 422, body: { error: { code: "QUIZ_INVALID", message: "" }, problems: [] } };
+    if (url === "/api/v1/quizzes/import" && init?.method === "POST")
+      return {
+        status: 422,
+        body: {
+          error: { code: "IMPORT_INVALID", message: "" },
+          errors: [{ file: "media/q1.png", question: null, field: null, problem: "IMAGE_NEEDS_ZIP" }],
+        },
+      };
+  });
+  renderApp("/quizzes");
+  fireEvent.click(await screen.findByText("Tải YAML"));
+  await waitFor(() => expect(calls.some((c) => c.url === "/api/v1/quizzes/q1/export?format=yaml")).toBe(true));
+  fireEvent.click(screen.getByText("Tải zip"));
+  await waitFor(() => expect(calls.some((c) => c.url === "/api/v1/quizzes/q1/export")).toBe(true));
+
+  const input = screen.getByTestId("zip-input") as HTMLInputElement;
+  expect(input.accept).toContain(".yaml");
+  fireEvent.change(input, { target: { files: [new File(["quiz: x"], "quiz.yaml")] } });
+  expect(await screen.findByText(/hãy nén quiz.yaml cùng thư mục media/)).toBeTruthy();
 });
 
 test("days left never goes below zero", () => {
