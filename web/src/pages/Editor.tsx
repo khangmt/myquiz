@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +14,8 @@ import type { QuestionKind } from "../generated/QuestionKind";
 import type { QuizDoc } from "../generated/QuizDoc";
 import type { QuizProblemDoc } from "../generated/QuizProblemDoc";
 import { daysLeft } from "./QuizList";
+
+const caption = "text-xs font-extrabold uppercase tracking-wide text-slate-500";
 
 export function Editor() {
   const { id = "" } = useParams();
@@ -92,6 +94,19 @@ function EditorForm({ initial }: { initial: QuizDoc }) {
     save.change(next);
   };
   const setQuestions = (questions: Draft["questions"]) => update({ ...draft, questions });
+
+  // A question just added or duplicated: once it renders, scroll to it and
+  // put the cursor in its text so the host can type straight away.
+  const [focusQuestion, setFocusQuestion] = useState<number | null>(null);
+  useEffect(() => {
+    if (focusQuestion === null) return;
+    setFocusQuestion(null);
+    const card = document.getElementById(`q${focusQuestion}`);
+    if (!card) return;
+    const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    card.scrollIntoView?.({ behavior: calm ? "auto" : "smooth", block: "start" });
+    card.querySelector("textarea")?.focus({ preventScroll: true });
+  }, [focusQuestion]);
   const labels = { true: t("editor.true"), false: t("editor.false") };
 
   /** Saves now, then runs `action`; stops if the save failed. */
@@ -175,49 +190,78 @@ function EditorForm({ initial }: { initial: QuizDoc }) {
       )}
       {shown.length > 0 && <ProblemList title={t("editor.fixBeforePublish")} problems={quizLevel.length ? quizLevel : shown} />}
 
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4">
-        <label className="flex flex-col gap-1 text-sm">
-          {t("editor.title")}
-          <input value={draft.title} maxLength={120} onChange={(e) => update({ ...draft, title: e.target.value })} className="rounded border border-slate-300 px-2 py-1 text-lg font-semibold" />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          {t("editor.description")}
-          <textarea value={draft.description} maxLength={1000} rows={2} onChange={(e) => update({ ...draft, description: e.target.value })} className="rounded border border-slate-300 px-2 py-1" />
-        </label>
-        <ImageField
-          url={draft.coverMediaUrl}
-          label={t("editor.addCover")}
-          onChange={(m) => update({ ...draft, coverMediaId: m?.id ?? null, coverMediaUrl: m?.url ?? null })}
-        />
-        <label className="flex items-center gap-2 text-sm">
-          {t("editor.visibility")}
-          <select value={draft.visibility} onChange={(e) => update({ ...draft, visibility: e.target.value })} className="rounded border border-slate-300 px-2 py-1">
-            <option value="private">{t("editor.private")}</option>
-            <option value="public">{t("editor.public")}</option>
-          </select>
-        </label>
+      <div className="overflow-hidden rounded-3xl border-[3px] border-ink bg-white shadow-[0_4px_0_var(--color-ink)]">
+        <h2 className="border-b-[3px] border-ink bg-sand px-4 py-2.5 text-lg font-extrabold">
+          <span aria-hidden>📝 </span>
+          {t("editor.quizDetails")}
+        </h2>
+        <div className="flex flex-col gap-3 p-4">
+          <label className="flex flex-col gap-1.5">
+            <span className={caption}>{t("editor.title")}</span>
+            <input
+              value={draft.title}
+              maxLength={120}
+              onChange={(e) => update({ ...draft, title: e.target.value })}
+              className="rounded-2xl border-[3px] border-ink bg-paper px-3 py-2 text-2xl font-extrabold text-ink focus:outline-none focus:ring-4 focus:ring-lagoon/50"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className={caption}>{t("editor.description")}</span>
+            <textarea value={draft.description} maxLength={1000} rows={2} onChange={(e) => update({ ...draft, description: e.target.value })} className="rounded-lg border-2 border-slate-300 px-2 py-1 focus:border-ink focus:outline-none focus:ring-4 focus:ring-lagoon/40" />
+          </label>
+          <ImageField
+            url={draft.coverMediaUrl}
+            label={t("editor.addCover")}
+            onChange={(m) => update({ ...draft, coverMediaId: m?.id ?? null, coverMediaUrl: m?.url ?? null })}
+          />
+          <label className="flex items-center gap-2 text-sm">
+            {t("editor.visibility")}
+            <select value={draft.visibility} onChange={(e) => update({ ...draft, visibility: e.target.value })} className="rounded-lg border-2 border-slate-300 bg-white px-2 py-1">
+              <option value="private">{t("editor.private")}</option>
+              <option value="public">{t("editor.public")}</option>
+            </select>
+          </label>
+        </div>
       </div>
 
-      {draft.questions.map((q, i) => (
-        <QuestionEditor
-          key={i}
-          index={i}
-          count={draft.questions.length}
-          question={q}
-          problems={byQuestion(i)}
-          onChange={(nq) => setQuestions(replaceAt(draft.questions, i, nq))}
-          onMove={(to) => setQuestions(move(draft.questions, i, to))}
-          onDuplicate={() => setQuestions([...draft.questions.slice(0, i + 1), { ...q }, ...draft.questions.slice(i + 1)])}
-          onDelete={() => {
-            if (window.confirm(t("editor.confirmDeleteQuestion", { n: i + 1 }))) setQuestions(removeAt(draft.questions, i));
-          }}
-        />
-      ))}
+      <h2 className="mt-4 flex items-center gap-3 text-xl font-extrabold">
+        {t("editor.questionsHeading", { count: draft.questions.length })}
+        <span aria-hidden className="h-[3px] flex-1 rounded-full bg-ink/15" />
+      </h2>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-slate-600">{t("editor.addQuestion")}</span>
+      <div className="flex flex-col gap-6">
+        {draft.questions.map((q, i) => (
+          <QuestionEditor
+            key={i}
+            index={i}
+            count={draft.questions.length}
+            question={q}
+            problems={byQuestion(i)}
+            onChange={(nq) => setQuestions(replaceAt(draft.questions, i, nq))}
+            onMove={(to) => setQuestions(move(draft.questions, i, to))}
+            onDuplicate={() => {
+              setQuestions([...draft.questions.slice(0, i + 1), { ...q }, ...draft.questions.slice(i + 1)]);
+              setFocusQuestion(i + 1);
+            }}
+            onDelete={() => {
+              if (window.confirm(t("editor.confirmDeleteQuestion", { n: i + 1 }))) setQuestions(removeAt(draft.questions, i));
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="sticky bottom-3 z-10 flex flex-wrap items-center gap-2 rounded-2xl border-[3px] border-ink bg-paper/95 p-3 shadow-[0_4px_0_var(--color-ink)] backdrop-blur">
+        <span className="text-sm font-extrabold">{t("editor.addQuestion")}</span>
         {(["single", "multi", "true_false", "fill_blank"] as QuestionKind[]).map((k) => (
-          <button key={k} type="button" onClick={() => setQuestions([...draft.questions, newQuestion(k, labels)])} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm">
+          <button
+            key={k}
+            type="button"
+            onClick={() => {
+              setQuestions([...draft.questions, newQuestion(k, labels)]);
+              setFocusQuestion(draft.questions.length);
+            }}
+            className="rounded-xl border-2 border-ink bg-white px-3 py-1.5 text-sm font-bold shadow-[0_2px_0_var(--color-ink)] transition hover:bg-mint active:translate-y-px active:shadow-none"
+          >
             + {t(`editor.kinds.${k}`)}
           </button>
         ))}

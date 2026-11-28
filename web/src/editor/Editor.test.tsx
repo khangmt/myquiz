@@ -122,3 +122,19 @@ test("a question can show code instead of an image, saved as Markdown", async ()
   expect(saved!.questions[0].markdown).toContain("int x = 1;");
   expect(saved!.questions[0].mediaId).toBeNull();
 });
+
+test("a new question is scrolled into view with the cursor in its text", async () => {
+  mockFetch((url) => {
+    if (url === "/api/v1/me") return { status: 200, body: ME };
+    if (url === "/api/v1/quizzes/q1") return { status: 200, body: DOC };
+  });
+  const scrolled: Element[] = [];
+  Element.prototype.scrollIntoView = function (this: Element) {
+    scrolled.push(this);
+  };
+  renderApp("/quizzes/q1/edit");
+  fireEvent.click(await screen.findByRole("button", { name: "+ Đúng/Sai" }));
+  const card = await screen.findByRole("article", { name: "Câu 2" });
+  await waitFor(() => expect(scrolled).toContain(card));
+  expect(document.activeElement).toBe(card.querySelector("textarea"));
+});

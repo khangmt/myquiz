@@ -192,7 +192,11 @@
       "codeHint": "Markdown. Put code between ```c and ``` lines to colour it.",
       "preview": "Preview",
       "empty": "Nothing yet. Type code or text on the left."
-    }
+    },
+    "quizDetails": "Quiz details",
+    "questionsHeading_one": "Questions ({{count}})",
+    "questionsHeading_other": "Questions ({{count}})",
+    "correct": "Correct"
   },
   "game": {
     "reconnecting": "Connection lost, reconnecting…",
