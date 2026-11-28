@@ -190,7 +190,10 @@
       "codeHint": "Markdown. Đặt mã giữa hai dòng ```c và ``` để tô màu.",
       "preview": "Xem trước",
       "empty": "Chưa có nội dung. Nhập mã hoặc văn bản ở bên trái."
-    }
+    },
+    "quizDetails": "Thông tin bộ câu hỏi",
+    "questionsHeading_other": "Câu hỏi ({{count}})",
+    "correct": "Đúng"
   },
   "game": {
     "reconnecting": "Mất kết nối, đang kết nối lại…",
