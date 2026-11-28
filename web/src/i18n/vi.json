@@ -199,7 +199,9 @@
     },
     "quizDetails": "Thông tin bộ câu hỏi",
     "questionsHeading_other": "Câu hỏi ({{count}})",
-    "correct": "Đúng"
+    "correct": "Đúng",
+    "addQuestionShort": "Thêm câu hỏi",
+    "close": "Đóng"
   },
   "game": {
     "reconnecting": "Mất kết nối, đang kết nối lại…",

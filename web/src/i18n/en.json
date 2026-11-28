@@ -202,7 +202,9 @@
     "quizDetails": "Quiz details",
     "questionsHeading_one": "Questions ({{count}})",
     "questionsHeading_other": "Questions ({{count}})",
-    "correct": "Correct"
+    "correct": "Correct",
+    "addQuestionShort": "Add question",
+    "close": "Close"
   },
   "game": {
     "reconnecting": "Connection lost, reconnecting…",

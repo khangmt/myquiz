@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiFailure } from "../api/client";
+import { AddQuestion } from "../editor/AddQuestion";
 import { ImageField } from "../editor/ImageField";
 import { fromDoc, move, newQuestion, removeAt, replaceAt, type Draft } from "../editor/model";
 import { QuestionEditor } from "../editor/QuestionEditor";
@@ -10,7 +11,6 @@ import { useAutosave, type SaveState } from "../editor/useAutosave";
 import { ProblemList } from "../components/ProblemList";
 import type { ExportLink } from "../generated/ExportLink";
 import type { GameCreated } from "../generated/GameCreated";
-import type { QuestionKind } from "../generated/QuestionKind";
 import type { QuizDoc } from "../generated/QuizDoc";
 import type { QuizProblemDoc } from "../generated/QuizProblemDoc";
 import { daysLeft } from "./QuizList";
@@ -250,22 +250,12 @@ function EditorForm({ initial }: { initial: QuizDoc }) {
         ))}
       </div>
 
-      <div className="sticky bottom-3 z-10 flex flex-wrap items-center gap-2 rounded-2xl border-[3px] border-ink bg-paper/95 p-3 shadow-[0_4px_0_var(--color-ink)] backdrop-blur">
-        <span className="text-sm font-extrabold">{t("editor.addQuestion")}</span>
-        {(["single", "multi", "true_false", "fill_blank"] as QuestionKind[]).map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => {
-              setQuestions([...draft.questions, newQuestion(k, labels)]);
-              setFocusQuestion(draft.questions.length);
-            }}
-            className="rounded-xl border-2 border-ink bg-white px-3 py-1.5 text-sm font-bold shadow-[0_2px_0_var(--color-ink)] transition hover:bg-mint active:translate-y-px active:shadow-none"
-          >
-            + {t(`editor.kinds.${k}`)}
-          </button>
-        ))}
-      </div>
+      <AddQuestion
+        onAdd={(k) => {
+          setQuestions([...draft.questions, newQuestion(k, labels)]);
+          setFocusQuestion(draft.questions.length);
+        }}
+      />
     </section>
   );
 }
