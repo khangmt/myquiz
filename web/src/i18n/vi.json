@@ -60,6 +60,43 @@
     "hostPublishes": "Bản nháp sẽ được xuất bản trước, rồi mở phòng chờ",
     "hostBlocked": "Chưa thể tổ chức \"{{title}}\": hãy sửa các lỗi sau trước."
   },
+  "share": {
+    "button": "Chia sẻ",
+    "title": "Chia sẻ \"{{title}}\"",
+    "public": "Bộ câu hỏi công khai",
+    "publicHint": "Mọi người đã đăng nhập đều thấy trong mục Bộ câu hỏi công khai, có thể tổ chức trò chơi hoặc sao chép.",
+    "people": "Chia sẻ với người cụ thể",
+    "peopleHint": "Họ thấy bộ câu hỏi trong mục Được chia sẻ với tôi, có thể tổ chức trò chơi hoặc sao chép. Chỉ bạn được sửa. Có thể dán nhiều địa chỉ cùng lúc.",
+    "emailPlaceholder": "Địa chỉ email",
+    "add": "Thêm",
+    "remove": "Bỏ",
+    "removeEmail": "Bỏ {{email}}",
+    "draftNote": "Bộ câu hỏi đang là bản nháp: người khác chỉ thấy sau khi bạn xuất bản.",
+    "answersNote": "Ai tổ chức hoặc sao chép được bộ câu hỏi thì cũng xem được đáp án đúng.",
+    "emailInvalid": "\"{{email}}\" không phải địa chỉ email.",
+    "cancel": "Huỷ",
+    "save": "Lưu",
+    "saving": "Đang lưu…",
+    "badgePublic": "Công khai",
+    "badgeShared_other": "Chia sẻ với {{count}} người"
+  },
+  "library": {
+    "tabs": "Danh sách bộ câu hỏi",
+    "tab": {
+      "mine": "Bộ câu hỏi của tôi",
+      "shared": "Được chia sẻ với tôi",
+      "public": "Bộ câu hỏi công khai"
+    },
+    "sharedIntro": "Bộ câu hỏi người khác chia sẻ với bạn. Bạn có thể tổ chức trò chơi, hoặc sao chép về Bộ câu hỏi của tôi để chỉnh sửa bản riêng.",
+    "publicIntro": "Bộ câu hỏi ai cũng dùng được. Bạn có thể tổ chức trò chơi, hoặc sao chép về Bộ câu hỏi của tôi để chỉnh sửa bản riêng.",
+    "sharedEmpty": "Chưa có ai chia sẻ bộ câu hỏi với bạn.",
+    "publicEmpty": "Chưa có bộ câu hỏi công khai nào.",
+    "by": "của {{name}}",
+    "updated": "cập nhật {{date}}",
+    "copy": "Sao chép về của tôi",
+    "copied": "Đã thêm \"{{title}}\" vào Bộ câu hỏi của tôi.",
+    "openCopy": "Mở"
+  },
   "problems": {
     "question": "câu {{n}}",
     "TITLE_LENGTH": "Tên phải có 1 đến 120 ký tự.",
@@ -129,7 +166,8 @@
     "SESSION_NOT_FOUND": "Không tìm thấy báo cáo.",
     "CANNOT_SUSPEND_SELF": "Quản trị viên không thể tự khóa tài khoản của mình.",
     "USER_NOT_FOUND": "Không tìm thấy người dùng.",
-    "NAME_LENGTH": "Tên lượt chơi tối đa 80 ký tự."
+    "NAME_LENGTH": "Tên lượt chơi tối đa 80 ký tự.",
+    "TOO_MANY_SHARES": "Mỗi bộ câu hỏi chỉ chia sẻ được với tối đa 100 người."
   },
   "editor": {
     "saved": "Đã lưu",

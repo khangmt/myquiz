@@ -3,4 +3,8 @@
 /**
  * One row of `GET /quizzes`.
  */
-export type QuizSummary = { id: string, title: string, status: string, visibility: string, questionCount: number, updatedAt: string, expiresAt: string, };
+export type QuizSummary = { id: string, title: string, status: string, visibility: string, questionCount: number, 
+/**
+ * How many people it is shared with by email.
+ */
+sharedWith: number, updatedAt: string, expiresAt: string, };

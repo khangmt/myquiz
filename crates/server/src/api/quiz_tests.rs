@@ -13,6 +13,7 @@ use crate::live::keys;
 /// A user with a login session, as the sign-in flow would leave it.
 struct User {
     id: Uuid,
+    email: String,
     cookie: String,
     csrf: String,
 }
@@ -38,6 +39,7 @@ async fn user(env: &Env) -> User {
         .unwrap();
     User {
         id,
+        email,
         cookie: format!("sid={sid}"),
         csrf,
     }
@@ -1371,4 +1373,225 @@ async fn games_are_named_renamed_and_searched() {
     assert_eq!(r["session"]["name"], "SE101.B");
     let res = send(&env.app, rename(&host, b, json!("  "))).await;
     assert!(json_body(res).await["name"].is_null());
+}
+
+/// Sharing: a published quiz made public is listed for everyone; one shared
+/// by email is listed for that person (the address may sign up later). Both
+/// can host it or copy it, images included, but never edit it.
+#[tokio::test]
+async fn share_a_quiz_publicly_and_with_people() {
+    let env = crate::api_env_or_skip!("");
+    let lan = user(&env).await;
+    let minh = user(&env).await;
+    let an = user(&env).await;
+
+    // Lan's quiz with an image of her own.
+    let media: Uuid = sqlx::query_scalar(
+        "INSERT INTO media (owner_id, storage_key, mime, bytes, width, height) \
+         VALUES ($1, $2, 'image/webp', 10, 1, 1) RETURNING id",
+    )
+    .bind(lan.id)
+    .bind(unique())
+    .fetch_one(&env.db)
+    .await
+    .unwrap();
+    let mut q = question("Ảnh?");
+    q["mediaId"] = json!(media.to_string());
+    let title = format!("Chia sẻ {}", unique());
+    let res = send(
+        &env.app,
+        lan.req("POST", "/api/v1/quizzes", Some(quiz(&title, vec![q]))),
+    )
+    .await;
+    let id = json_body(res).await["id"].as_str().unwrap().to_string();
+    let sharing = format!("/api/v1/quizzes/{id}/sharing");
+    let lib = |scope: &str| format!("/api/v1/library?scope={scope}&q={}", urlencode(&title));
+
+    // Nothing is shared yet.
+    let res = send(&env.app, lan.req("GET", &sharing, None)).await;
+    assert_eq!(
+        json_body(res).await,
+        json!({ "visibility": "private", "emails": [] })
+    );
+    // Only the owner sees or sets the sharing.
+    for req in [
+        minh.req("GET", &sharing, None),
+        minh.req("PUT", &sharing, Some(json!({ "visibility": "public" }))),
+    ] {
+        assert_eq!(send(&env.app, req).await.status(), StatusCode::NOT_FOUND);
+    }
+    // Bad input is refused.
+    let res = send(
+        &env.app,
+        lan.req("PUT", &sharing, Some(json!({ "visibility": "secret" }))),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let res = send(
+        &env.app,
+        lan.req(
+            "PUT",
+            &sharing,
+            Some(json!({ "visibility": "private", "emails": ["not an email"] })),
+        ),
+    )
+    .await;
+    assert_eq!(json_body(res).await["error"]["code"], "EMAIL_INVALID");
+
+    // Share with Minh (any letter case), a future user, and Lan herself
+    // (dropped).
+    let later = format!("{}@uit.edu.vn", unique());
+    let res = send(
+        &env.app,
+        lan.req(
+            "PUT",
+            &sharing,
+            Some(json!({
+                "visibility": "private",
+                "emails": [minh.email.to_uppercase(), later, "", lan.email, minh.email],
+            })),
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let mut want = vec![minh.email.clone(), later.clone()];
+    want.sort();
+    assert_eq!(json_body(res).await["emails"], json!(want));
+
+    // A draft is not visible to anyone else yet.
+    let res = send(&env.app, minh.req("GET", &lib("shared"), None)).await;
+    assert_eq!(json_body(res).await["total"], 0);
+    let res = send(
+        &env.app,
+        minh.req("POST", "/api/v1/games", Some(json!({ "quizId": id }))),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+    let res = send(
+        &env.app,
+        lan.req("POST", &format!("/api/v1/quizzes/{id}/publish"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Minh sees it under Shared with me, not under Public; An sees neither;
+    // Lan does not see her own quiz in the library.
+    let res = send(&env.app, minh.req("GET", &lib("shared"), None)).await;
+    let page = json_body(res).await;
+    assert_eq!(page["total"], 1);
+    assert_eq!(page["items"][0]["id"], id.as_str());
+    assert_eq!(page["items"][0]["ownerName"], "Test");
+    assert_eq!(page["items"][0]["questionCount"], 1);
+    for (who, scope) in [
+        (&minh, "public"),
+        (&an, "shared"),
+        (&an, "public"),
+        (&lan, "shared"),
+    ] {
+        let res = send(&env.app, who.req("GET", &lib(scope), None)).await;
+        assert_eq!(json_body(res).await["total"], 0, "{scope}");
+    }
+    let res = send(
+        &env.app,
+        minh.req("GET", "/api/v1/library?scope=mine", None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+    // Minh can host it; the game is Minh's.
+    let res = send(
+        &env.app,
+        minh.req("POST", "/api/v1/games", Some(json!({ "quizId": id }))),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let session: Uuid = json_body(res).await["sessionId"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let host: Uuid = sqlx::query_scalar("SELECT host_id FROM game_sessions WHERE id = $1")
+        .bind(session)
+        .fetch_one(&env.db)
+        .await
+        .unwrap();
+    assert_eq!(host, minh.id);
+    sqlx::query("UPDATE game_sessions SET status = 'ended', pin = NULL WHERE id = $1")
+        .bind(session)
+        .execute(&env.db)
+        .await
+        .unwrap();
+
+    // Minh cannot read, edit, publish or delete the original...
+    let path = format!("/api/v1/quizzes/{id}");
+    for req in [
+        minh.req("GET", &path, None),
+        minh.req_v("PUT", &path, 2, quiz("Của tôi", vec![])),
+        minh.req("DELETE", &path, None),
+        minh.req("POST", &format!("{path}/publish"), None),
+        minh.req("POST", &format!("{path}/export"), None),
+    ] {
+        assert_eq!(send(&env.app, req).await.status(), StatusCode::NOT_FOUND);
+    }
+    // ...but can copy it, and edit the copy with its image.
+    let res = send(
+        &env.app,
+        minh.req("POST", &format!("{path}/duplicate"), None),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let copy = json_body(res).await;
+    assert_eq!(copy["title"], format!("{title} (copy)"));
+    assert_eq!(copy["visibility"], "private");
+    assert_eq!(copy["status"], "draft");
+    assert_eq!(copy["questions"][0]["mediaId"], media.to_string());
+    let copy_id = copy["id"].as_str().unwrap();
+    let mut body = copy.clone();
+    body["title"] = json!("Bản của Minh");
+    let res = send(
+        &env.app,
+        minh.req_v("PUT", &format!("/api/v1/quizzes/{copy_id}"), 1, body),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    // The original is untouched.
+    let res = send(&env.app, lan.req("GET", &path, None)).await;
+    assert_eq!(json_body(res).await["title"], title.as_str());
+
+    // Made public and unshared: An sees it under Public and can copy it;
+    // Minh still can as a public quiz, but no longer under Shared.
+    let res = send(
+        &env.app,
+        lan.req(
+            "PUT",
+            &sharing,
+            Some(json!({ "visibility": "public", "emails": [] })),
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    // The editor sees the change, with a new version.
+    let res = send(&env.app, lan.req("GET", &path, None)).await;
+    let doc = json_body(res).await;
+    assert_eq!(doc["visibility"], "public");
+    assert_eq!(doc["version"], 2);
+    let res = send(&env.app, an.req("GET", &lib("public"), None)).await;
+    assert_eq!(json_body(res).await["total"], 1);
+    let res = send(&env.app, minh.req("GET", &lib("shared"), None)).await;
+    assert_eq!(json_body(res).await["total"], 0);
+    let res = send(&env.app, an.req("POST", &format!("{path}/duplicate"), None)).await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // Back to private: nobody else can use it any more.
+    let res = send(
+        &env.app,
+        lan.req("PUT", &sharing, Some(json!({ "visibility": "private" }))),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = send(&env.app, an.req("POST", &format!("{path}/duplicate"), None)).await;
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+    let res = send(&env.app, an.req("GET", &lib("public"), None)).await;
+    assert_eq!(json_body(res).await["total"], 0);
 }

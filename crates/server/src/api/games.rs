@@ -11,11 +11,13 @@ use uuid::Uuid;
 use super::audit::{client_ip, hash_ip};
 use super::auth::AuthUser;
 use super::error::{ApiResult, AppError};
-use super::quizzes::{load_questions, load_quiz, to_snapshot};
+use super::quizzes::{load_questions, to_snapshot};
 use super::{ratelimit, ApiState};
 use crate::live::keys;
 
-/// `POST /games { quizId }`: the owner starts a lobby for a published quiz.
+/// `POST /games { quizId }`: the owner, or someone the quiz is shared with
+/// or a public quiz's user, starts a lobby for a published quiz. The game
+/// and its report belong to whoever hosts it.
 /// The quiz is copied into the session, so later edits never change this
 /// game or its report.
 pub async fn create(
@@ -28,7 +30,7 @@ pub async fn create(
         .parse()
         .map_err(|_| AppError::not_found("QUIZ_NOT_FOUND"))?;
     let name = super::reports::clean_name(body.name.as_deref())?;
-    let row = load_quiz(&state.app.db, &state, &user, quiz_id, false, false).await?;
+    let row = super::sharing::load_usable(&state, &user, quiz_id).await?;
     if row.status != "published" {
         return Err(AppError::new(
             StatusCode::CONFLICT,

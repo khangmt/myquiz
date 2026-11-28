@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiFailure } from "../api/client";
 import { ProblemList } from "../components/ProblemList";
+import { ShareDialog } from "../components/ShareDialog";
+import { Library, type Scope } from "./Library";
 import type { ExportLink } from "../generated/ExportLink";
 import type { GameCreated } from "../generated/GameCreated";
 import type { Imported } from "../generated/Imported";
@@ -27,7 +29,46 @@ type Notice =
   | { kind: "error"; code: string }
   | { kind: "imported" };
 
+const TABS = ["mine", "shared", "public"] as const;
+type Tab = (typeof TABS)[number];
+
+/** My quizzes, plus the quizzes others shared with me and public ones. */
 export function QuizList() {
+  const { t } = useTranslation();
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("tab");
+  const tab: Tab = raw === "shared" || raw === "public" ? raw : "mine";
+  return (
+    <section className="flex flex-col gap-4">
+      <div role="tablist" aria-label={t("library.tabs")} className="flex flex-wrap gap-1 border-b border-slate-200">
+        {TABS.map((k) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={tab === k}
+            onClick={() => setParams(k === "mine" ? {} : { tab: k })}
+            className={`-mb-px rounded-t-lg border-b-2 px-3 py-2 font-semibold ${
+              tab === k ? "border-indigo-600 text-indigo-700" : "border-transparent text-slate-600 hover:text-indigo-700"
+            }`}
+          >
+            {t(`library.tab.${k}`)}
+          </button>
+        ))}
+      </div>
+      {tab === "mine" ? (
+        <MyQuizzes />
+      ) : (
+        <>
+          <h1 className="text-2xl font-bold">{t(`library.tab.${tab}`)}</h1>
+          <Library scope={tab as Scope} />
+        </>
+      )}
+    </section>
+  );
+}
+
+function MyQuizzes() {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -35,6 +76,7 @@ export function QuizList() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [sharing, setSharing] = useState<QuizSummary | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   // Search after the user pauses typing.
@@ -125,7 +167,15 @@ export function QuizList() {
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
 
   return (
-    <section className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4">
+      {sharing && (
+        <ShareDialog
+          quizId={sharing.id}
+          title={sharing.title}
+          published={sharing.status === "published"}
+          onClose={() => setSharing(null)}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="mr-auto text-2xl font-bold">{t("quizzes.title")}</h1>
         <button
@@ -215,6 +265,16 @@ export function QuizList() {
                 <p className="text-sm text-slate-600">
                   {t("quizzes.questions", { count: Number(q.questionCount) })} ·{" "}
                   {t(`quizzes.status.${q.status}`)} · {t("quizzes.deletedOn", { date: date(q.expiresAt) })}
+                  {q.visibility === "public" && (
+                    <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-xs font-semibold text-green-900">
+                      {t("share.badgePublic")}
+                    </span>
+                  )}
+                  {Number(q.sharedWith) > 0 && (
+                    <span className="ml-2 rounded bg-sky-100 px-1.5 py-0.5 text-xs font-semibold text-sky-900">
+                      {t("share.badgeShared", { count: Number(q.sharedWith) })}
+                    </span>
+                  )}
                   {left <= 7 && (
                     <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
                       {t("quizzes.daysLeft", { count: left })}
@@ -231,6 +291,9 @@ export function QuizList() {
                   onClick={() => host.mutate(q)}
                 >
                   {host.isPending && host.variables?.id === q.id ? t("quizzes.hosting") : t("quizzes.host")}
+                </button>
+                <button type="button" className="underline" onClick={() => setSharing(q)}>
+                  {t("share.button")}
                 </button>
                 <button type="button" className="underline" onClick={() => download.mutate({ q, format: "zip" })}>
                   {t("quizzes.download")}
@@ -272,6 +335,6 @@ export function QuizList() {
           </button>
         </div>
       )}
-    </section>
+    </div>
   );
 }

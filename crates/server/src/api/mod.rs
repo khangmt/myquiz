@@ -9,6 +9,7 @@ pub mod media;
 pub mod quizzes;
 pub mod ratelimit;
 pub mod reports;
+pub mod sharing;
 pub mod signed;
 pub mod zip;
 
@@ -123,6 +124,8 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/quizzes/{id}/duplicate", post(quizzes::duplicate))
         .route("/quizzes/{id}/publish", post(quizzes::publish))
+        .route("/quizzes/{id}/sharing", get(sharing::get).put(sharing::put))
+        .route("/library", get(sharing::library))
         .route("/games", post(games::create))
         .route("/games/pin/{pin}", get(games::check_pin))
         .route("/quizzes/{id}/export", post(zip::export))
