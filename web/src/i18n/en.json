@@ -290,6 +290,16 @@
       "cute": "Cute",
       "anime": "Anime"
     },
+    "mode": {
+      "label": "Game mode",
+      "normal": "Normal",
+      "exam": "Exam",
+      "hint": "Exam mode moves on by itself: after each question the result shows for a few seconds, then the next question starts. No scoreboard in between; the podium comes at the end.",
+      "badge": "Exam mode",
+      "nextIn": "Next question in {{s}}…",
+      "podiumIn": "Final results in {{s}}…",
+      "nextNow": "Next now"
+    },
     "chat": {
       "label": "Chat",
       "mode": {

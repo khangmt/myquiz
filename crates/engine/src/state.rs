@@ -7,8 +7,17 @@
 //! Leaderboard(last) ─next─▶ Podium ─next─▶ Ended        (end: any state ─▶ Ended)
 //! ```
 //!
+//! In exam mode the game moves on by itself: a short pause after each
+//! reveal, then `advance` goes straight to the next question (no
+//! leaderboard), and after the last one to the podium:
+//!
+//! ```text
+//! Question(i) ─deadline│all answered│skip─▶ Reveal(i) ─advance─▶ Question(i+1) │ Podium
+//! ```
+//!
 //! Only the host advances the game, except Question → Reveal, which also
-//! fires when the deadline passes or every connected player has answered.
+//! fires when the deadline passes or every connected player has answered,
+//! and Reveal → next in exam mode, which the deadline sweep fires.
 //! Each Redis transition script performs exactly these checks before it
 //! writes, so a double click or two workers racing cannot skip a question.
 
@@ -42,6 +51,9 @@ pub enum Command {
     Deadline { index: usize },
     /// Every connected player has answered question `index`.
     AllAnswered { index: usize },
+    /// Exam mode: the pause after question `index`'s reveal is over (or the
+    /// host cut it short). Reveal → next question, or Podium after the last.
+    Advance { index: usize },
     /// `host:end`, host timeout or suspension: finish now, keep results.
     End,
 }
@@ -90,6 +102,12 @@ impl GameState {
                 C::Skip { index: i } | C::Deadline { index: i } | C::AllAnswered { index: i },
             ) if i == index => Ok(S::Reveal { index }),
             (_, C::Skip { .. } | C::Deadline { .. } | C::AllAnswered { .. }) => Err(E::Stale),
+
+            (S::Reveal { index }, C::Advance { index: i }) if i == index && index + 1 < total => {
+                Ok(S::Question { index: index + 1 })
+            }
+            (S::Reveal { index }, C::Advance { index: i }) if i == index => Ok(S::Podium),
+            (_, C::Advance { .. }) => Err(E::Stale),
         }
     }
 
@@ -153,6 +171,43 @@ mod tests {
                 S::Podium,
                 S::Ended,
             ]
+        );
+    }
+
+    #[test]
+    fn exam_mode_advances_without_leaderboards() {
+        let mut s = S::Lobby.apply(C::Start, 2).unwrap();
+        let mut seen = vec![s];
+        while s != S::Podium {
+            s = match s {
+                S::Question { index } => s.apply(C::Deadline { index }, 2).unwrap(),
+                S::Reveal { index } => s.apply(C::Advance { index }, 2).unwrap(),
+                other => panic!("unexpected {other:?}"),
+            };
+            seen.push(s);
+        }
+        assert_eq!(
+            seen,
+            vec![
+                S::Question { index: 0 },
+                S::Reveal { index: 0 },
+                S::Question { index: 1 },
+                S::Reveal { index: 1 },
+                S::Podium,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_late_or_wrong_advance_does_nothing() {
+        // Two workers' sweeps: the second finds the next question running.
+        let reveal = S::Reveal { index: 0 };
+        let q = reveal.apply(C::Advance { index: 0 }, 3).unwrap();
+        assert_eq!(q.apply(C::Advance { index: 0 }, 3), Err(E::Stale));
+        assert_eq!(reveal.apply(C::Advance { index: 1 }, 3), Err(E::Stale));
+        assert_eq!(
+            S::Leaderboard { index: 0 }.apply(C::Advance { index: 0 }, 3),
+            Err(E::Stale)
         );
     }
 

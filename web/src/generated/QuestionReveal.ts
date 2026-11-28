@@ -2,4 +2,9 @@
 import type { OptionCount } from "./OptionCount";
 import type { TextCount } from "./TextCount";
 
-export type QuestionReveal = { index: number, correctOptionIds: Array<number>, acceptedAnswers: Array<string>, distribution: Array<OptionCount>, topTextAnswers: Array<TextCount>, };
+export type QuestionReveal = { index: number, correctOptionIds: Array<number>, acceptedAnswers: Array<string>, distribution: Array<OptionCount>, topTextAnswers: Array<TextCount>, 
+/**
+ * Exam mode: when the game moves on by itself (server clock, ms).
+ * Null in normal mode.
+ */
+advancesAt: number | null, };

@@ -128,6 +128,7 @@ impl GameService {
         // A screen that reconnects after the question ended must draw the
         // same view the pushes drew: the reveal, the leaderboard or the podium.
         let (mut reveal, mut result, mut top) = (None, None, None);
+        let advances_at = (meta.exam && meta.advance_at_ms > 0).then_some(meta.advance_at_ms);
         match meta.state {
             GameState::Reveal { index } => {
                 let quiz = self.quiz(pin).await?;
@@ -143,6 +144,7 @@ impl GameService {
                             accepted_answers: revealed.accepted_answers,
                             distribution: outcome.distribution,
                             top_text_answers: outcome.top_text_answers,
+                            advances_at,
                         });
                     }
                     Some(mine) => {
@@ -155,6 +157,7 @@ impl GameService {
                             total: mine.score,
                             rank: mine.rank,
                             correct_option_ids: revealed.correct_option_ids,
+                            advances_at,
                         });
                     }
                 }
@@ -183,6 +186,7 @@ impl GameService {
             theme: meta.theme.clone(),
             chat: meta.chat.clone(),
             phones_show_question: meta.phones_show_question,
+            exam: meta.exam,
             players: lobby_list(&players),
             question,
             report_id: for_host.then(|| meta.session.clone()),
@@ -256,6 +260,17 @@ impl GameService {
             .await
     }
 
+    /// `host:mode`: normal or exam mode, picked in the lobby.
+    pub async fn set_mode(&self, pin: &str, exam: bool) -> Result<Result<(), Code>> {
+        if !self.store.set_exam(pin, exam).await? {
+            return Ok(Err("WRONG_STATE"));
+        }
+        self.hub
+            .to_all(pin, &ServerPush::GameMode(GameMode { exam }))
+            .await?;
+        Ok(Ok(()))
+    }
+
     pub async fn lock(&self, pin: &str, locked: bool) -> Result<()> {
         self.store.set_locked(pin, locked).await?;
         self.push_lobby_now(pin).await
@@ -326,7 +341,20 @@ impl GameService {
             self.end_game(pin, EndReason::Finished).await?;
             return Ok(Ok(()));
         }
+        // Exam mode has no leaderboard between questions: Next cuts the
+        // pause short instead.
+        if let (true, GameState::Reveal { index }) = (meta.exam, meta.state) {
+            return self.advance(pin, index).await;
+        }
         let r = self.store.command(pin, Command::Next { expect }).await?;
+        self.after_command(pin, r).await
+    }
+
+    /// Exam mode: reveal `index` → next question, or the podium after the
+    /// last. The deadline sweep calls it when the pause is over; several
+    /// workers may, and only the first one moves the game.
+    pub async fn advance(&self, pin: &str, index: usize) -> Result<Result<(), Code>> {
+        let r = self.store.command(pin, Command::Advance { index }).await?;
         self.after_command(pin, r).await
     }
 
@@ -692,6 +720,12 @@ impl GameService {
         self.save_answers(&meta.session, index, &answers, &outcome.results)
             .await?;
 
+        // Exam mode: the clock for the next question starts as results go out.
+        let advances_at = if meta.exam {
+            self.store.schedule_advance(pin, index).await?
+        } else {
+            None
+        };
         let revealed = RevealedAnswer::from_question(q);
         self.hub
             .to_host(
@@ -702,6 +736,7 @@ impl GameService {
                     accepted_answers: revealed.accepted_answers,
                     distribution: outcome.distribution,
                     top_text_answers: outcome.top_text_answers,
+                    advances_at,
                 }),
             )
             .await?;
@@ -720,6 +755,7 @@ impl GameService {
                     total: r.standing.score,
                     rank: r.rank,
                     correct_option_ids: revealed.correct_option_ids.clone(),
+                    advances_at,
                 });
                 (id, encode(&push))
             })

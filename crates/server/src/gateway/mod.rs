@@ -131,7 +131,8 @@ pub(crate) fn cookie(headers: &HeaderMap, name: &str) -> Option<String> {
 }
 
 /// The deadline sweep (design section 4): every worker checks every 250 ms
-/// for questions past their end time. The Redis reveal script lets only one
+/// for questions past their end time, and in exam mode for reveals whose
+/// pause is over. The Redis reveal script lets only one
 /// worker act on each.
 pub fn spawn_sweep(service: Arc<GameService>) {
     tokio::spawn(async move {
@@ -151,8 +152,15 @@ pub fn spawn_sweep(service: Arc<GameService>) {
                 tokio::spawn(async move {
                     let run = async {
                         if let Some(meta) = service.store.meta(&pin).await? {
-                            if let myquiz_engine::GameState::Question { index } = meta.state {
-                                service.finish_question(&pin, index).await?;
+                            match meta.state {
+                                myquiz_engine::GameState::Question { index } => {
+                                    service.finish_question(&pin, index).await?;
+                                }
+                                // Exam mode: the pause after a reveal is over.
+                                myquiz_engine::GameState::Reveal { index } if meta.exam => {
+                                    let _ = service.advance(&pin, index).await?;
+                                }
+                                _ => {}
                             }
                         }
                         anyhow::Ok(())
@@ -536,6 +544,9 @@ impl Connection {
                     ClientMessage::HostSkip(s) => svc.skip(&pin, s.index).await?.map(|_| json!({})),
                     ClientMessage::HostChat(c) => {
                         svc.set_chat(&pin, &c.mode).await?.map(|_| json!({}))
+                    }
+                    ClientMessage::HostMode(m) => {
+                        svc.set_mode(&pin, m.exam).await?.map(|_| json!({}))
                     }
                     ClientMessage::HostPhones(p) => {
                         svc.set_phones(&pin, p.show_question).await?;

@@ -366,6 +366,40 @@ test("the host shows code during the question and beside the answers, and can en
   expect(await screen.findByRole("dialog")).toBeTruthy();
 });
 
+test("the host picks exam mode in the lobby, and the reveal counts down to the next question", async () => {
+  mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : url.endsWith("/config") ? { status: 200, body: { joinUrl: null } } : undefined));
+  renderApp("/host/123456");
+  const ws = await socket();
+  ws.ack("host:attach", { ...lobby, exam: false, players: [{ id: "p1", nickname: "Lan", avatar: "bunny" }] });
+  const examRadio = await screen.findByRole("radio", { name: "Kiểm tra" });
+  expect(screen.getByRole("radio", { name: "Thường" }).getAttribute("aria-checked")).toBe("true");
+  fireEvent.click(examRadio);
+  expect(ws.sent.at(-1)).toMatchObject({ t: "host:mode", d: { exam: true } });
+  ws.ack("host:mode", {});
+  ws.push("game:mode", { exam: true });
+  await waitFor(() => expect(screen.getByRole("radio", { name: "Kiểm tra" }).getAttribute("aria-checked")).toBe("true"));
+
+  ws.push("question:start", question());
+  expect(await screen.findByText("Chế độ kiểm tra")).toBeTruthy();
+  ws.push("question:reveal", { index: 0, correctOptionIds: [0], acceptedAnswers: [], distribution: [], topTextAnswers: [], advancesAt: Date.now() + 4_500 });
+  expect(await screen.findByText(/Câu tiếp theo sau [45]/)).toBeTruthy();
+  // Next still works, to cut the pause short.
+  fireEvent.click(screen.getByText("Sang câu ngay"));
+  expect(ws.sent.at(-1)).toMatchObject({ t: "host:next", d: { expect: { state: "reveal", index: 0 } } });
+});
+
+test("a player's result in exam mode says when the next question comes", async () => {
+  localStorage.setItem("myquiz.player.123456", "tok-9");
+  mockFetch(() => undefined);
+  renderApp("/join?pin=123456");
+  const ws = await socket();
+  ws.ack("player:resume", { ...lobby, exam: true, me: { playerId: "p1", nickname: "Lan", score: 0, rank: 1, answered: false } });
+  expect(await screen.findByText("Bạn đã vào phòng!")).toBeTruthy();
+  ws.push("question:start", question({ index: 1, total: 2 }));
+  ws.push("question:result", { index: 1, answered: true, correct: true, points: 900, total: 900, rank: 1, correctOptionIds: [0], advancesAt: Date.now() + 3_000 });
+  expect(await screen.findByText(/Kết quả chung cuộc sau [23]/)).toBeTruthy();
+});
+
 test("the host chooses whether phones show the question, and the choice is kept", async () => {
   mockFetch((url) => (url.endsWith("/me") ? { status: 200, body: ME } : url.endsWith("/config") ? { status: 200, body: { joinUrl: null } } : undefined));
   renderApp("/host/123456");

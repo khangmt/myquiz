@@ -6,7 +6,7 @@
 -- Returns {1, playerId, answerJSON, ...} or {0}.
 local cur = redis.call('HMGET', KEYS[1], 'state', 'index')
 if cur[1] ~= 'question' or cur[2] ~= ARGV[2] then return {0} end
-redis.call('HSET', KEYS[1], 'state', 'reveal')
+redis.call('HSET', KEYS[1], 'state', 'reveal', 'advanceAt', 0)
 redis.call('ZREM', KEYS[2], ARGV[1])
 local out = {1}
 local answers = redis.call('HGETALL', KEYS[3])

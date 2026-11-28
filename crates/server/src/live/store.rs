@@ -21,6 +21,8 @@ pub const MAX_PLAYERS: u32 = 200;
 /// with a moment left can reach the server just after the end on slow
 /// phones or busy classroom Wi-Fi; the reveal waits this long too.
 pub const ANSWER_GRACE_MS: u64 = 500;
+/// Exam mode: how long the result stays up before the next question.
+pub const EXAM_PAUSE_MS: u64 = 5_000;
 
 macro_rules! script {
     ($name:literal) => {
@@ -47,6 +49,8 @@ static SCORES: LazyLock<Script> = script!("scores");
 static FINISH: LazyLock<Script> = script!("finish");
 static CLOCK: LazyLock<Script> = script!("clock");
 static CHAT: LazyLock<Script> = script!("chat");
+static MODE: LazyLock<Script> = script!("mode");
+static ADVANCE: LazyLock<Script> = script!("advance");
 
 /// A player as stored in `game:<pin>:players`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -131,6 +135,10 @@ pub struct GameMeta {
     /// Whether phones show the question and its image/code; true until the
     /// host turns it off.
     pub phones_show_question: bool,
+    /// Exam mode: the game moves on by itself after each reveal.
+    pub exam: bool,
+    /// Exam mode, while in reveal: when the next question starts (ms).
+    pub advance_at_ms: u64,
     pub starts_at_ms: u64,
     pub ends_at_ms: u64,
     pub answered: u32,
@@ -203,6 +211,7 @@ fn text(v: &Value) -> Result<String> {
 pub struct LiveStore {
     redis: Pool,
     countdown_ms: u64,
+    exam_pause_ms: u64,
 }
 
 impl LiveStore {
@@ -216,7 +225,15 @@ impl LiveStore {
         Self {
             redis,
             countdown_ms,
+            exam_pause_ms: EXAM_PAUSE_MS,
         }
+    }
+
+    /// Tests shorten the pause after each reveal in exam mode.
+    #[allow(dead_code)]
+    pub fn with_exam_pause(mut self, ms: u64) -> Self {
+        self.exam_pause_ms = ms;
+        self
     }
 
     #[allow(dead_code)]
@@ -326,6 +343,8 @@ impl LiveStore {
                 c => c.into(),
             },
             phones_show_question: get("phones") != "0",
+            exam: get("mode") == "exam",
+            advance_at_ms: num("advanceAt"),
             starts_at_ms: num("startsAt"),
             ends_at_ms: num("endsAt"),
             answered: num("answered") as u32,
@@ -513,6 +532,36 @@ impl LiveStore {
         let v = if show_question { "1" } else { "0" };
         let _: i64 = self.redis.hset(keys::game(pin), ("phones", v)).await?;
         Ok(())
+    }
+
+    /// Switches exam mode on or off. False once the game has started.
+    pub async fn set_exam(&self, pin: &str, exam: bool) -> Result<bool> {
+        let mode = if exam { "exam" } else { "normal" };
+        let out = self
+            .run(&MODE, vec![keys::game(pin)], vec![mode.into()])
+            .await?;
+        Ok(int(&out)? == 1)
+    }
+
+    /// Exam mode: schedules the move on from reveal `index`. Returns when it
+    /// happens (ms), or None if the game is not in exam mode or has already
+    /// left that reveal.
+    pub async fn schedule_advance(&self, pin: &str, index: usize) -> Result<Option<u64>> {
+        let out = self
+            .run(
+                &ADVANCE,
+                vec![keys::game(pin), keys::DEADLINES.into()],
+                vec![
+                    pin.into(),
+                    index.to_string(),
+                    self.exam_pause_ms.to_string(),
+                ],
+            )
+            .await?;
+        Ok(match int(&out)? {
+            0 => None,
+            at => Some(at as u64),
+        })
     }
 
     /// One player, if they are (still) in the game.
@@ -712,7 +761,8 @@ impl LiveStore {
             .collect()
     }
 
-    /// PINs whose current question is past its deadline.
+    /// PINs whose current question is past its deadline, or (exam mode)
+    /// whose reveal pause is over.
     pub async fn due(&self, limit: usize) -> Result<Vec<String>> {
         let out = array(
             self.run(&DUE, vec![keys::DEADLINES.into()], vec![limit.to_string()])

@@ -135,6 +135,8 @@ export function Host() {
   // Whether phones show the question and its image/code, or only the
   // answer buttons (when everyone reads the projector).
   const [phonesShow, setPhonesShow] = useState(true);
+  // Exam mode: the game moves on by itself after each question.
+  const [exam, setExam] = useState(false);
   // The question's image or code, enlarged over the whole screen.
   const [zoomed, setZoomed] = useState(false);
   // Hides the popups on this screen only; players can still send. For when
@@ -156,6 +158,7 @@ export function Host() {
     setLocked(s.locked);
     setTheme(asTheme(s.theme));
     setChatMode(asChatMode(s.chat));
+    setExam(!!s.exam);
     const shown = s.phonesShowQuestion !== false;
     setPhonesShow(shown);
     // A new game starts with the host's choice from last time.
@@ -224,6 +227,8 @@ export function Host() {
         return setChatMode(asChatMode(p.d.mode));
       case "game:phones":
         return setPhonesShow(p.d.showQuestion);
+      case "game:mode":
+        return setExam(p.d.exam);
       case "chat:message":
         if (!hiddenRef.current) addChat(p.d);
         return;
@@ -250,7 +255,9 @@ export function Host() {
     return () => s.close();
   }, [pin, onPush, fromSnapshot]);
 
-  const now = useTicker(view.kind === "question", useCallback(() => socket.current?.serverNow() ?? Date.now(), []));
+  // When an exam-mode reveal moves on by itself, if this one does.
+  const advancesAt = view.kind === "reveal" ? (view.reveal.advancesAt ?? null) : null;
+  const now = useTicker(view.kind === "question" || advancesAt !== null, useCallback(() => socket.current?.serverNow() ?? Date.now(), []));
 
   async function act(msg: Parameters<GameSocket["request"]>[0]) {
     if (!socket.current) return;
@@ -321,6 +328,7 @@ export function Host() {
               <MusicControl />
               {view.kind !== "lobby" && (
                 <>
+              {exam && <Chip>{t("game.mode.badge")}</Chip>}
               <Chip>
                 <span className="text-ink/60">PIN</span>
                 <span className="tracking-wider">{pin}</span>
@@ -401,6 +409,7 @@ export function Host() {
               )}
               {view.kind === "lobby" && (
                 <>
+                  <ModePicker exam={exam} disabled={busy} onChange={(e) => act({ t: "host:mode", d: { exam: e } })} />
                   <ThemePicker value={theme} disabled={busy} onChange={(th) => act({ t: "host:theme", d: { theme: th } })} />
                   <button type="button" className={btn.secondary} aria-pressed={locked} onClick={() => act({ t: "host:lock", d: { locked: !locked } })}>
                     {locked ? t("game.unlock") : t("game.lock")}
@@ -415,7 +424,13 @@ export function Host() {
                   {t("game.skip")}
                 </button>
               )}
-              {(view.kind === "reveal" || view.kind === "leaderboard" || view.kind === "between") && nextButton(t("game.next"))}
+              {advancesAt !== null && view.kind === "reveal" && (
+                <span className="font-bold text-ink/80" aria-live="polite">
+                  {t(view.q && view.q.index + 1 >= view.q.total ? "game.mode.podiumIn" : "game.mode.nextIn", { s: secondsLeft(advancesAt, now) })}
+                </span>
+              )}
+              {(view.kind === "reveal" || view.kind === "leaderboard" || view.kind === "between") &&
+                nextButton(advancesAt !== null ? t("game.mode.nextNow") : t("game.next"))}
               {view.kind === "podium" && nextButton(t("game.finish"))}
             </div>
           </>
@@ -570,6 +585,28 @@ export function Host() {
     </Stage>
     {zoomed && shownMedia && <MediaZoom value={shownMedia} onClose={() => setZoomed(false)} onPopOut={() => openMediaWindow(pin)} />}
     </ThemeContext.Provider>
+  );
+}
+
+/** Normal (the host presses Next) or exam (moves on by itself), picked in the lobby. */
+function ModePicker({ exam, disabled, onChange }: { exam: boolean; disabled: boolean; onChange: (exam: boolean) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div role="radiogroup" aria-label={t("game.mode.label")} title={t("game.mode.hint")} className="flex items-center gap-1 rounded-2xl border-[3px] border-ink bg-white p-1 shadow-[0_3px_0_var(--color-ink)]">
+      {[false, true].map((e) => (
+        <button
+          key={String(e)}
+          type="button"
+          role="radio"
+          aria-checked={exam === e}
+          disabled={disabled}
+          onClick={() => exam !== e && onChange(e)}
+          className={`rounded-xl px-3 py-1.5 text-sm font-bold transition ${exam === e ? "bg-sand" : "hover:bg-mint"}`}
+        >
+          {t(e ? "game.mode.exam" : "game.mode.normal")}
+        </button>
+      ))}
+    </div>
   );
 }
 

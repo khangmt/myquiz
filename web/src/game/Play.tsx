@@ -306,7 +306,8 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pin, onPush, fromSnapshot]);
 
-  const now = useTicker(view.kind === "question", useCallback(() => socket.current?.serverNow() ?? Date.now(), []));
+  const advancesAt = view.kind === "result" ? (view.r.advancesAt ?? null) : null;
+  const now = useTicker(view.kind === "question" || advancesAt !== null, useCallback(() => socket.current?.serverNow() ?? Date.now(), []));
 
   async function submit(q: QuestionStart, optionIds: number[], text: string | null) {
     if (!socket.current) return;
@@ -418,6 +419,13 @@ function Game({ pin, nickname, avatar, onLeave }: { pin: string; nickname: strin
           <p className="text-6xl font-black tabular-nums">+{view.r.points}</p>
           <p className="rounded-full border-2 border-ink bg-white px-4 py-2 font-bold">{t("game.rankIs", { rank: view.r.rank })}</p>
           {rightAnswer && <p className="text-lg text-ink/90">{t("game.acceptedAnswers", { answers: rightAnswer })}</p>}
+          {advancesAt !== null && (
+            <Muted>
+              {t(lastQuestion.current && lastQuestion.current.index + 1 >= lastQuestion.current.total ? "game.mode.podiumIn" : "game.mode.nextIn", {
+                s: secondsLeft(advancesAt, now),
+              })}
+            </Muted>
+          )}
         </>
       )}
 
