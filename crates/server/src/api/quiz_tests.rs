@@ -745,6 +745,169 @@ async fn bad_zips_are_refused_with_every_problem() {
     assert_eq!(res.status(), StatusCode::CREATED);
 }
 
+/// A one-file upload with a chosen file name, e.g. `quiz.yaml`.
+fn upload_named(user: &User, name: &str, bytes: &[u8]) -> Request<Body> {
+    let boundary = "myquiz-test-boundary";
+    let mut body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; \
+         filename=\"{name}\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+    )
+    .into_bytes();
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    Request::post("/api/v1/quizzes/import")
+        .header(header::COOKIE, &user.cookie)
+        .header("X-CSRF-Token", &user.csrf)
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(body))
+        .unwrap()
+}
+
+#[tokio::test]
+async fn quizzes_download_and_upload_as_yaml() {
+    let env = crate::api_env_or_skip!("");
+    let lan = user(&env).await;
+    let minh = user(&env).await;
+
+    // A quiz with a code question and no images: a plain .yaml file.
+    let code = "```c\nint a[3] = {1, 2, 3};\nprintf(\"%d\", a[1]);\n```";
+    let mut coded = question("In ra gì?");
+    coded["markdown"] = json!(code);
+    let body = quiz("Mảng: C", vec![question("Câu 1"), coded]);
+    let res = send(&env.app, lan.req("POST", "/api/v1/quizzes", Some(body))).await;
+    let id = json_body(res).await["id"].as_str().unwrap().to_string();
+
+    let res = send(
+        &env.app,
+        lan.req(
+            "POST",
+            &format!("/api/v1/quizzes/{id}/export?format=yaml"),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let url = json_body(res).await["url"].as_str().unwrap().to_string();
+    let res = send(&env.app, Request::get(&url).body(Body::empty()).unwrap()).await;
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers()[header::CONTENT_TYPE],
+        "application/yaml; charset=utf-8"
+    );
+    let disposition = res.headers()[header::CONTENT_DISPOSITION]
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        disposition.starts_with("attachment; filename=\"myquiz-mang-c-")
+            && disposition.ends_with(".yaml\""),
+        "{disposition}"
+    );
+    let yaml = String::from_utf8(body_bytes(res).await).unwrap();
+    // The code reads as code, one line per line.
+    assert!(yaml.contains("markdown: |"), "{yaml}");
+    assert!(yaml.contains("\n      int a[3] = {1, 2, 3};\n"), "{yaml}");
+
+    // Minh uploads it (any case of .yaml/.yml): a new draft, same content.
+    for name in ["quiz.yaml", "Chuong7.YML"] {
+        let res = send(&env.app, upload_named(&minh, name, yaml.as_bytes())).await;
+        assert_eq!(res.status(), StatusCode::CREATED, "{name}");
+        let new_id = json_body(res).await["quizId"].as_str().unwrap().to_string();
+        let res = send(
+            &env.app,
+            minh.req("GET", &format!("/api/v1/quizzes/{new_id}"), None),
+        )
+        .await;
+        let copy = json_body(res).await;
+        assert_eq!(copy["title"], "Mảng: C");
+        assert_eq!(copy["status"], "draft");
+        assert_eq!(copy["questions"][1]["markdown"], code);
+    }
+
+    // With an image, the YAML comes inside a zip together with media/.
+    let res = send(
+        &env.app,
+        multipart_to(&lan, "/api/v1/media", &[("file", &png(40, 30))]),
+    )
+    .await;
+    let media = json_body(res).await;
+    let mut q = question("Có hình");
+    q["mediaId"] = media["id"].clone();
+    let res = send(
+        &env.app,
+        lan.req("POST", "/api/v1/quizzes", Some(quiz("Có hình", vec![q]))),
+    )
+    .await;
+    let pic = json_body(res).await["id"].as_str().unwrap().to_string();
+    let res = send(
+        &env.app,
+        lan.req(
+            "POST",
+            &format!("/api/v1/quizzes/{pic}/export?format=yaml"),
+            None,
+        ),
+    )
+    .await;
+    let url = json_body(res).await["url"].as_str().unwrap().to_string();
+    let res = send(&env.app, Request::get(&url).body(Body::empty()).unwrap()).await;
+    assert_eq!(res.headers()[header::CONTENT_TYPE], "application/zip");
+    let zip = body_bytes(res).await;
+    // Entry names are stored as plain bytes in the zip's headers.
+    let has = |name: &[u8]| zip.windows(name.len()).any(|w| w == name);
+    assert!(has(b"quiz.yaml") && has(b"media/q1.webp") && !has(b"quiz.json"));
+    let res = send(
+        &env.app,
+        multipart_to(&minh, "/api/v1/quizzes/import", &[("file", &zip)]),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+
+    // A plain YAML file that names an image is refused with a clear reason.
+    let mut file = myquiz_bundle::template();
+    file.quiz.questions[0].image = Some("media/q1.png".into());
+    let res = send(
+        &env.app,
+        upload_named(&minh, "quiz.yaml", myquiz_bundle::to_yaml(&file).as_bytes()),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = json_body(res).await;
+    assert_eq!(body["errors"][0]["problem"], "IMAGE_NEEDS_ZIP");
+    let res = send(&env.app, upload_named(&minh, "quiz.yml", b"quiz: [")).await;
+    assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(json_body(res).await["errors"][0]["problem"], "INVALID_YAML");
+
+    // Unknown formats are refused; the YAML template downloads and imports.
+    let res = send(
+        &env.app,
+        lan.req(
+            "POST",
+            &format!("/api/v1/quizzes/{id}/export?format=xml"),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let res = send(
+        &env.app,
+        Request::get("/api/v1/quiz-template.yaml")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::OK);
+    let template = body_bytes(res).await;
+    let res = send(
+        &env.app,
+        upload_named(&minh, "myquiz-template.yaml", &template),
+    )
+    .await;
+    assert_eq!(res.status(), StatusCode::CREATED);
+}
+
 /// A finished game written straight to the database, as the game servers
 /// leave it: two players ranked, one removed, one unanswered question.
 async fn finished_game(env: &Env, host: &User) -> Uuid {

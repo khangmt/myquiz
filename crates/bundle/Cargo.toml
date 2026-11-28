@@ -13,5 +13,6 @@ thiserror.workspace = true
 myquiz-engine.workspace = true
 zip = { version = "9.8.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 regex-lite = "0.1.9"
+serde_yaml_ng = "0.10"
 
 [dev-dependencies]

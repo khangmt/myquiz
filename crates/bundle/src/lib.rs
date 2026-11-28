@@ -3,11 +3,15 @@
 //!
 //! ```text
 //! myquiz-<title-slug>-<yyyymmdd>.zip
-//! ├── quiz.json        required; format name + version
+//! ├── quiz.json        required (or quiz.yaml / quiz.yml); format name + version
 //! ├── media/
 //! │   └── q3.png       names: [a-z0-9_-]{1,64}.(jpg|jpeg|png|webp)
 //! └── README.txt       written on export, ignored on import
 //! ```
+//!
+//! The same quiz can also travel as YAML: `quiz.yaml` inside the zip, or,
+//! when the quiz has no images, a plain `.yaml` file ([`read_yaml`],
+//! [`to_yaml`]). Both formats carry exactly the same fields.
 //!
 //! [`read_bundle`] is the import side and treats the file as hostile: the
 //! structure is checked before any content is read, every entry is read
@@ -20,5 +24,8 @@ pub mod format;
 mod read;
 mod write;
 
-pub use read::{read_bundle, Bundle, Limits, Problem};
-pub use write::{file_name, template, write_bundle, README};
+pub use read::{read_bundle, read_yaml, Bundle, Limits, Problem};
+pub use write::{
+    file_name, file_name_ext, template, to_yaml, write_bundle, write_bundle_as, Manifest, README,
+    YAML_HEADER,
+};

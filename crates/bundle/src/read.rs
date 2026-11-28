@@ -78,6 +78,28 @@ pub struct Bundle {
     pub images: BTreeMap<String, Vec<u8>>,
 }
 
+/// The quiz file inside a zip: JSON or YAML, exactly one of them.
+const MANIFESTS: [&str; 3] = ["quiz.json", "quiz.yaml", "quiz.yml"];
+
+fn is_manifest(name: &str) -> bool {
+    MANIFESTS.contains(&name)
+}
+
+#[derive(Clone, Copy)]
+enum Syntax {
+    Json,
+    Yaml,
+}
+
+impl Syntax {
+    fn parse<T: serde::de::DeserializeOwned>(self, raw: &[u8]) -> Result<T, String> {
+        match self {
+            Syntax::Json => serde_json::from_slice(raw).map_err(|e| e.to_string()),
+            Syntax::Yaml => serde_yaml_ng::from_slice(raw).map_err(|e| e.to_string()),
+        }
+    }
+}
+
 static MEDIA_NAME: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^media/[a-z0-9_-]{1,64}\.(jpg|jpeg|png|webp)$").unwrap());
 
@@ -123,10 +145,24 @@ pub fn read_bundle<R: Read + Seek>(mut reader: R, limits: &Limits) -> Result<Bun
     let entries = check_structure(&mut zip, limits)?;
     let mut budget = limits.max_total;
 
-    // quiz.json
-    let Some(manifest) = entries.iter().find(|e| e.name == "quiz.json") else {
-        return Err(vec![Problem::file("quiz.json", "MISSING_QUIZ_JSON")]);
+    // quiz.json (or quiz.yaml)
+    let manifests: Vec<&Entry> = entries.iter().filter(|e| is_manifest(&e.name)).collect();
+    let manifest = match manifests.as_slice() {
+        [] => return Err(vec![Problem::file("quiz.json", "MISSING_QUIZ_JSON")]),
+        [one] => *one,
+        [_, more @ ..] => {
+            return Err(more
+                .iter()
+                .map(|e| Problem::file(&e.name, "MULTIPLE_QUIZ_FILES"))
+                .collect())
+        }
     };
+    let syntax = if manifest.name == "quiz.json" {
+        Syntax::Json
+    } else {
+        Syntax::Yaml
+    };
+    let manifest_name = manifest.name.clone();
     let raw = read_entry(
         &mut zip,
         manifest,
@@ -135,10 +171,10 @@ pub fn read_bundle<R: Read + Seek>(mut reader: R, limits: &Limits) -> Result<Bun
         &mut budget,
     )
     .map_err(|p| vec![p])?;
-    let quiz = parse_manifest(&raw)?;
+    let quiz = parse_manifest(&raw, &manifest_name, syntax)?;
 
     // Content rules, then images.
-    let mut problems = validate_quiz(&quiz);
+    let mut problems = validate_quiz(&quiz, &manifest_name);
     let mut images = BTreeMap::new();
     let mut wanted: Vec<&str> = quiz.image_refs().collect();
     wanted.sort_unstable();
@@ -250,7 +286,7 @@ fn check_structure<R: Read + Seek>(
     }
 
     // A zip made by right-clicking a folder wraps everything in that folder.
-    if !raw.iter().any(|e| e.name == "quiz.json") {
+    if !raw.iter().any(|e| is_manifest(&e.name)) {
         if let Some(prefix) = single_wrapping_folder(&raw) {
             for e in &mut raw {
                 e.name = e.name[prefix.len()..].to_string();
@@ -263,7 +299,7 @@ fn check_structure<R: Read + Seek>(
     let mut entries = Vec::new();
     for e in raw {
         let allowed =
-            e.name == "quiz.json" || e.name == "README.txt" || MEDIA_NAME.is_match(&e.name);
+            is_manifest(&e.name) || e.name == "README.txt" || MEDIA_NAME.is_match(&e.name);
         if !allowed {
             problems.push(Problem::file(&e.name, "NAME_NOT_ALLOWED"));
             continue;
@@ -297,7 +333,7 @@ fn single_wrapping_folder(entries: &[Entry]) -> Option<String> {
     let all_inside = entries.iter().all(|e| e.name.starts_with(&prefix));
     let has_manifest = entries
         .iter()
-        .any(|e| e.name == format!("{prefix}quiz.json"));
+        .any(|e| e.name.strip_prefix(&prefix).is_some_and(is_manifest));
     (all_inside && has_manifest).then_some(prefix)
 }
 
@@ -333,10 +369,40 @@ fn read_entry<R: Read + Seek>(
     Ok(buf)
 }
 
-fn parse_manifest(raw: &[u8]) -> Result<QuizV1, Vec<Problem>> {
-    let bad = |code: &str, detail: String| vec![Problem::file("quiz.json", code).detail(detail)];
-    let header: Header =
-        serde_json::from_slice(raw).map_err(|e| bad("INVALID_JSON", e.to_string()))?;
+/// Reads a plain `.yaml` quiz upload (no zip). Such a file cannot carry
+/// images, so any image it names is reported as `IMAGE_NEEDS_ZIP`.
+pub fn read_yaml(raw: &[u8], limits: &Limits) -> Result<Bundle, Vec<Problem>> {
+    const NAME: &str = "quiz.yaml";
+    if raw.len() as u64 > limits.max_quiz_json {
+        return Err(vec![Problem::file(NAME, "FILE_TOO_LARGE")]);
+    }
+    let quiz = parse_manifest(raw, NAME, Syntax::Yaml)?;
+    let mut problems = validate_quiz(&quiz, NAME);
+    let mut wanted: Vec<&str> = quiz.image_refs().collect();
+    wanted.sort_unstable();
+    wanted.dedup();
+    for path in wanted {
+        if MEDIA_NAME.is_match(path) {
+            problems.push(Problem::file(path, "IMAGE_NEEDS_ZIP"));
+        }
+    }
+    if problems.is_empty() {
+        Ok(Bundle {
+            quiz,
+            images: BTreeMap::new(),
+        })
+    } else {
+        Err(problems)
+    }
+}
+
+fn parse_manifest(raw: &[u8], name: &str, syntax: Syntax) -> Result<QuizV1, Vec<Problem>> {
+    let bad = |code: &str, detail: String| vec![Problem::file(name, code).detail(detail)];
+    let invalid = match syntax {
+        Syntax::Json => "INVALID_JSON",
+        Syntax::Yaml => "INVALID_YAML",
+    };
+    let header: Header = syntax.parse(raw).map_err(|e| bad(invalid, e))?;
     if header.format != FORMAT || header.version == 0 {
         return Err(bad(
             "BAD_FORMAT",
@@ -350,20 +416,19 @@ fn parse_manifest(raw: &[u8]) -> Result<QuizV1, Vec<Problem>> {
         ));
     }
     // Version 1 is current; later versions add upgrade steps here.
-    let file: QuizFileV1 =
-        serde_json::from_slice(raw).map_err(|e| bad("INVALID_JSON", e.to_string()))?;
+    let file: QuizFileV1 = syntax.parse(raw).map_err(|e| bad(invalid, e))?;
     Ok(file.quiz)
 }
 
 /// The editor's rules (shared validator in crates/engine), plus the fields
 /// only a file can get wrong.
-fn validate_quiz(quiz: &QuizV1) -> Vec<Problem> {
+fn validate_quiz(quiz: &QuizV1, file: &str) -> Vec<Problem> {
     let mut out: Vec<Problem> = quiz
         .to_snapshot()
         .validate()
         .into_iter()
         .map(|QuizProblem { question, error }| Problem {
-            file: "quiz.json".into(),
+            file: file.into(),
             question,
             field: Some(field_of(error).into()),
             problem: format!("{error:?}").to_uppercase_snake(),
@@ -371,32 +436,37 @@ fn validate_quiz(quiz: &QuizV1) -> Vec<Problem> {
         })
         .collect();
     if quiz.description.chars().count() > 1000 {
-        out.push(field_problem(None, "description", "DESCRIPTION_LENGTH"));
+        out.push(field_problem(
+            file,
+            None,
+            "description",
+            "DESCRIPTION_LENGTH",
+        ));
     }
     if let Some(c) = &quiz.cover {
         if !MEDIA_NAME.is_match(c) {
-            out.push(field_problem(None, "cover", "BAD_IMAGE_PATH"));
+            out.push(field_problem(file, None, "cover", "BAD_IMAGE_PATH"));
         }
     }
     for (i, q) in quiz.questions.iter().enumerate() {
         if let Some(img) = &q.image {
             if !MEDIA_NAME.is_match(img) {
-                out.push(field_problem(Some(i), "image", "BAD_IMAGE_PATH"));
+                out.push(field_problem(file, Some(i), "image", "BAD_IMAGE_PATH"));
             }
         }
         if q.image_alt
             .as_ref()
             .is_some_and(|a| a.chars().count() > 300)
         {
-            out.push(field_problem(Some(i), "imageAlt", "ALT_TEXT_LENGTH"));
+            out.push(field_problem(file, Some(i), "imageAlt", "ALT_TEXT_LENGTH"));
         }
     }
     out
 }
 
-fn field_problem(question: Option<usize>, field: &str, code: &str) -> Problem {
+fn field_problem(file: &str, question: Option<usize>, field: &str, code: &str) -> Problem {
     Problem {
-        file: "quiz.json".into(),
+        file: file.into(),
         question,
         field: Some(field.into()),
         problem: code.into(),

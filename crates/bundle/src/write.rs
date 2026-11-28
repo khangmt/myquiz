@@ -10,16 +10,57 @@ This zip is a quiz exported from myquiz.
 
 Keep it to reuse the quiz later: quizzes are deleted from the server 3 weeks
 after they were last edited or played. To bring it back, open myquiz, go to
-My quizzes and choose Import zip. You can edit quiz.json in a text editor;
-images go in the media folder.
+My quizzes and choose Import. You can edit quiz.json (or quiz.yaml) in a
+text editor; images go in the media folder.
 
 Zip này là một bộ câu hỏi được xuất từ myquiz.
 
 Hãy giữ lại để dùng sau: bộ câu hỏi bị xoá khỏi máy chủ 3 tuần sau lần sửa
 hoặc lần chơi gần nhất. Để khôi phục, mở myquiz, vào Bộ câu hỏi của tôi và
-chọn Nhập tệp zip. Bạn có thể sửa quiz.json bằng trình soạn thảo văn bản;
-hình ảnh nằm trong thư mục media.
+chọn Nhập. Bạn có thể sửa quiz.json (hoặc quiz.yaml) bằng trình soạn thảo
+văn bản; hình ảnh nằm trong thư mục media.
 ";
+
+/// Which text file describes the quiz inside a download.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Manifest {
+    Json,
+    Yaml,
+}
+
+impl Manifest {
+    /// The name inside the zip: `quiz.json` or `quiz.yaml`.
+    pub fn file_name(self) -> &'static str {
+        match self {
+            Manifest::Json => "quiz.json",
+            Manifest::Yaml => "quiz.yaml",
+        }
+    }
+
+    pub fn to_bytes(self, file: &QuizFileV1) -> Vec<u8> {
+        match self {
+            Manifest::Json => serde_json::to_vec_pretty(file).expect("quiz.json serialises"),
+            Manifest::Yaml => to_yaml(file).into_bytes(),
+        }
+    }
+}
+
+/// Comment written at the top of every YAML export.
+pub const YAML_HEADER: &str = "\
+# A quiz exported from myquiz. Edit it in any text editor, then import it
+# again from My quizzes. Multi-line text such as code goes after `|`,
+# indented by two spaces.
+# Bộ câu hỏi xuất từ myquiz. Sửa bằng trình soạn thảo văn bản rồi nhập lại
+# trong Bộ câu hỏi của tôi. Văn bản nhiều dòng (ví dụ mã nguồn) viết sau `|`,
+# thụt vào hai dấu cách.
+";
+
+/// The quiz as YAML. Multi-line strings (code in `markdown`) come out as
+/// literal `|` blocks, so code stays readable and copy-pastable.
+pub fn to_yaml(file: &QuizFileV1) -> String {
+    let body = serde_yaml_ng::to_string(file).expect("quiz.yaml serialises");
+    format!("{YAML_HEADER}{body}")
+}
 
 /// Writes a bundle: `quiz.json` deflated, images stored as they are (they
 /// are already compressed), and a README. `images` yields
@@ -30,13 +71,27 @@ where
     I: IntoIterator<Item = (String, B)>,
     B: AsRef<[u8]>,
 {
+    write_bundle_as(out, file, images, Manifest::Json)
+}
+
+/// [`write_bundle`] with the quiz written as `quiz.json` or `quiz.yaml`.
+pub fn write_bundle_as<W, I, B>(
+    out: W,
+    file: &QuizFileV1,
+    images: I,
+    manifest: Manifest,
+) -> zip::result::ZipResult<W>
+where
+    W: Write + Seek,
+    I: IntoIterator<Item = (String, B)>,
+    B: AsRef<[u8]>,
+{
     let mut zip = ZipWriter::new(out);
     let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
     let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
 
-    zip.start_file("quiz.json", deflated)?;
-    let json = serde_json::to_vec_pretty(file).expect("quiz.json serialises");
-    zip.write_all(&json)?;
+    zip.start_file(manifest.file_name(), deflated)?;
+    zip.write_all(&manifest.to_bytes(file))?;
 
     for (path, bytes) in images {
         zip.start_file(path, stored)?;
@@ -51,6 +106,11 @@ where
 /// `myquiz-<title-slug>-<yyyymmdd>.zip`. The slug keeps ASCII letters and
 /// digits, drops Vietnamese marks (đ → d) and joins words with `-`.
 pub fn file_name(title: &str, yyyymmdd: &str) -> String {
+    file_name_ext(title, yyyymmdd, "zip")
+}
+
+/// [`file_name`] with another extension, e.g. `yaml`.
+pub fn file_name_ext(title: &str, yyyymmdd: &str, ext: &str) -> String {
     let folded = myquiz_engine::matching::normalize(title, true);
     let mut slug = String::new();
     for c in folded.chars() {
@@ -63,9 +123,9 @@ pub fn file_name(title: &str, yyyymmdd: &str) -> String {
     let slug: String = slug.trim_end_matches('-').chars().take(50).collect();
     let slug = slug.trim_end_matches('-');
     if slug.is_empty() {
-        format!("myquiz-quiz-{yyyymmdd}.zip")
+        format!("myquiz-quiz-{yyyymmdd}.{ext}")
     } else {
-        format!("myquiz-{slug}-{yyyymmdd}.zip")
+        format!("myquiz-{slug}-{yyyymmdd}.{ext}")
     }
 }
 
