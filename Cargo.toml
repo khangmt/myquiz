@@ -19,7 +19,7 @@ tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["trace", "cors", "compression-gzip", "limit", "set-header"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-ts-rs = { version = "10", features = ["serde-compat"] }
+ts-rs = { version = "12", features = ["serde-compat"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 fred = { version = "10", features = ["i-scripts", "sha-1", "subscriber-client"] }
 
