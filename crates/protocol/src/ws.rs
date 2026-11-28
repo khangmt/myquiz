@@ -99,6 +99,8 @@ pub enum ClientMessage {
     HostChat(HostChat),
     #[serde(rename = "host:phones")]
     HostPhones(HostPhones),
+    #[serde(rename = "host:mode")]
+    HostMode(HostMode),
     #[serde(rename = "player:join")]
     PlayerJoin(PlayerJoin),
     #[serde(rename = "player:resume")]
@@ -137,6 +139,10 @@ wire! {
     /// Whether players' phones show the question text and its image/code,
     /// or only the answer buttons; any time during the game.
     pub struct HostPhones { pub show_question: bool }
+    /// Normal mode (the host presses Next after each question) or exam mode
+    /// (the game moves on by itself after a short look at the result, with
+    /// no leaderboard between questions); only while in the lobby.
+    pub struct HostMode { pub exam: bool }
 
     pub struct PlayerJoin {
         pub pin: String,
@@ -187,6 +193,9 @@ wire! {
         /// Whether phones show the question and its image/code (see
         /// [`HostPhones`]).
         pub phones_show_question: bool,
+        /// Exam mode (see [`HostMode`]).
+        #[serde(default)]
+        pub exam: bool,
         pub players: Vec<LobbyPlayer>,
         /// Set while a question is running.
         pub question: Option<QuestionStart>,
@@ -252,6 +261,11 @@ wire! {
         pub accepted_answers: Vec<String>,
         pub distribution: Vec<OptionCount>,
         pub top_text_answers: Vec<TextCount>,
+        /// Exam mode: when the game moves on by itself (server clock, ms).
+        /// Null in normal mode.
+        #[serde(default)]
+        #[ts(type = "number | null")]
+        pub advances_at: Option<u64>,
     }
 
     pub struct QuestionResult {
@@ -264,6 +278,10 @@ wire! {
         pub total: u64,
         pub rank: u32,
         pub correct_option_ids: Vec<OptionId>,
+        /// Exam mode: when the game moves on by itself (server clock, ms).
+        #[serde(default)]
+        #[ts(type = "number | null")]
+        pub advances_at: Option<u64>,
     }
 
     pub struct ScoreRow { pub nickname: String, pub avatar: String, #[ts(type = "number")] pub score: u64 }
@@ -275,6 +293,8 @@ wire! {
     pub struct GameChat { pub mode: String }
     /// The host changed what phones show (see [`HostPhones`]).
     pub struct GamePhones { pub show_question: bool }
+    /// The host switched between normal and exam mode in the lobby.
+    pub struct GameMode { pub exam: bool }
     /// A player's chat popup, to the host only.
     pub struct ChatMessage {
         pub player_id: String,
@@ -339,6 +359,8 @@ pub enum ServerPush {
     GameChat(GameChat),
     #[serde(rename = "game:phones")]
     GamePhones(GamePhones),
+    #[serde(rename = "game:mode")]
+    GameMode(GameMode),
     #[serde(rename = "chat:message")]
     ChatMessage(ChatMessage),
     #[serde(rename = "rejoin:request")]

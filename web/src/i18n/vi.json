@@ -288,6 +288,16 @@
       "cute": "Dễ thương",
       "anime": "Anime"
     },
+    "mode": {
+      "label": "Chế độ chơi",
+      "normal": "Thường",
+      "exam": "Kiểm tra",
+      "hint": "Chế độ kiểm tra tự chuyển câu: hết mỗi câu, kết quả hiện vài giây rồi câu tiếp theo bắt đầu. Không có bảng điểm giữa các câu; bục vinh danh hiện ở cuối.",
+      "badge": "Chế độ kiểm tra",
+      "nextIn": "Câu tiếp theo sau {{s}}…",
+      "podiumIn": "Kết quả chung cuộc sau {{s}}…",
+      "nextNow": "Sang câu ngay"
+    },
     "chat": {
       "label": "Trò chuyện",
       "mode": {

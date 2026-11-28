@@ -45,7 +45,8 @@ async fn env() -> Option<Env> {
     // for a real 5 s question. It must still be long enough for a bot to
     // answer "too early" on a busy CI runner (tests share one Redis and run
     // in parallel), so not under a few hundred ms.
-    let store = LiveStore::with_countdown(redis.clone(), 400);
+    // Exam mode's pause after each reveal is shortened the same way.
+    let store = LiveStore::with_countdown(redis.clone(), 400).with_exam_pause(1_000);
     let hub = Hub::start(redis.clone(), &redis_url).await.unwrap();
     let service = GameService::new(store.clone(), db.clone(), hub);
     super::spawn_sweep(service.clone());
@@ -829,6 +830,117 @@ async fn host_hides_the_question_on_phones() {
     host.ok("host:phones", json!({ "showQuestion": true }))
         .await;
     assert_eq!(a.push("game:phones").await["showQuestion"], true);
+}
+
+#[tokio::test]
+async fn exam_mode_moves_on_by_itself() {
+    let env = env_or_skip!();
+    let (pin, sid, _) = seed_game(&env).await;
+    let mut host = Bot::connect(&env.addr, Some(&sid)).await;
+    let snap = host.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["exam"], false);
+    let mut a = Bot::connect(&env.addr, None).await;
+    a.ok(
+        "player:join",
+        json!({ "pin": pin, "nickname": "Ana", "deviceId": "dev-a" }),
+    )
+    .await;
+
+    // Only the host picks the mode; phones hear it and snapshots keep it.
+    assert_eq!(
+        a.refused("host:mode", json!({ "exam": true })).await,
+        "FORBIDDEN"
+    );
+    host.ok("host:mode", json!({ "exam": true })).await;
+    assert_eq!(a.push("game:mode").await["exam"], true);
+    let snap = host.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["exam"], true);
+
+    host.ok("host:start", json!({})).await;
+    // Once started, the mode is fixed.
+    assert_eq!(
+        host.refused("host:mode", json!({ "exam": false })).await,
+        "WRONG_STATE"
+    );
+
+    // Question 0: the only player answers, so it is revealed at once and
+    // the result carries when the game moves on.
+    let q0 = a.push("question:start").await;
+    host.push("question:start").await;
+    wait_until_shown(&env.store, q0["startsAt"].as_u64().unwrap()).await;
+    a.ok("answer:submit", json!({ "index": 0, "optionIds": [1] }))
+        .await;
+    let reveal = host.push("question:reveal").await;
+    let at = reveal["advancesAt"].as_u64().expect("advancesAt set");
+    assert!(at > env.store.now_ms().await.unwrap());
+    assert_eq!(a.push("question:result").await["advancesAt"], at);
+    // A screen that reconnects during the pause sees the same time.
+    let snap = host.ok("host:attach", json!({ "pin": pin })).await;
+    assert_eq!(snap["reveal"]["advancesAt"], at);
+
+    // Nobody presses Next: question 1 starts after the pause, with no
+    // leaderboard in between.
+    let q1 = host.push("question:start").await;
+    assert_eq!(q1["index"], 1);
+    assert!(q1["startsAt"].as_u64().unwrap() >= at);
+    assert!(
+        host.pushes.iter().all(|p| p["t"] != "leaderboard:show"),
+        "no leaderboard between questions in exam mode"
+    );
+    a.push("question:start").await;
+
+    // Question 1 is the last. The host's Next cuts the pause short and goes
+    // straight to the podium.
+    wait_until_shown(&env.store, q1["startsAt"].as_u64().unwrap()).await;
+    a.ok("answer:submit", json!({ "index": 1, "optionIds": [1, 2] }))
+        .await;
+    let reveal = host.push("question:reveal").await;
+    assert!(reveal["advancesAt"].is_u64());
+    host.ok(
+        "host:next",
+        json!({ "expect": { "state": "reveal", "index": 1 } }),
+    )
+    .await;
+    let podium = host.push("game:podium").await;
+    assert!(env.store.now_ms().await.unwrap() < reveal["advancesAt"].as_u64().unwrap());
+    assert_eq!(podium["top"][0]["nickname"], "Ana");
+    assert_eq!(
+        env.store.meta(&pin).await.unwrap().unwrap().state,
+        GameState::Podium
+    );
+    // The sweep does not move the podium on; the host finishes the game.
+    tokio::time::sleep(Duration::from_millis(1_300)).await;
+    assert_eq!(
+        env.store.meta(&pin).await.unwrap().unwrap().state,
+        GameState::Podium
+    );
+}
+
+#[tokio::test]
+async fn normal_mode_still_waits_for_the_host() {
+    let env = env_or_skip!();
+    let (pin, sid, _) = seed_game(&env).await;
+    let mut host = Bot::connect(&env.addr, Some(&sid)).await;
+    host.ok("host:attach", json!({ "pin": pin })).await;
+    let mut a = Bot::connect(&env.addr, None).await;
+    a.ok(
+        "player:join",
+        json!({ "pin": pin, "nickname": "Ana", "deviceId": "dev-a" }),
+    )
+    .await;
+    host.ok("host:start", json!({})).await;
+    let q0 = a.push("question:start").await;
+    wait_until_shown(&env.store, q0["startsAt"].as_u64().unwrap()).await;
+    a.ok("answer:submit", json!({ "index": 0, "optionIds": [1] }))
+        .await;
+    let reveal = host.push("question:reveal").await;
+    assert!(reveal["advancesAt"].is_null());
+    // Longer than exam mode's pause: still on the reveal.
+    tokio::time::sleep(Duration::from_millis(1_500)).await;
+    assert_eq!(
+        env.store.meta(&pin).await.unwrap().unwrap().state,
+        GameState::Reveal { index: 0 }
+    );
 }
 
 #[tokio::test]

@@ -4,4 +4,8 @@ export type QuestionResult = { index: number,
 /**
  * False when the player sent nothing before time ran out.
  */
-answered: boolean, correct: boolean, points: number, total: number, rank: number, correctOptionIds: Array<number>, };
+answered: boolean, correct: boolean, points: number, total: number, rank: number, correctOptionIds: Array<number>, 
+/**
+ * Exam mode: when the game moves on by itself (server clock, ms).
+ */
+advancesAt: number | null, };

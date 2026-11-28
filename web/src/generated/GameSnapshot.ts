@@ -24,7 +24,11 @@ chat: string,
  * Whether phones show the question and its image/code (see
  * [`HostPhones`]).
  */
-phonesShowQuestion: boolean, players: Array<LobbyPlayer>, 
+phonesShowQuestion: boolean, 
+/**
+ * Exam mode (see [`HostMode`]).
+ */
+exam: boolean, players: Array<LobbyPlayer>, 
 /**
  * Set while a question is running.
  */
