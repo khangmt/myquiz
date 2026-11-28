@@ -138,3 +138,27 @@ test("a new question is scrolled into view with the cursor in its text", async (
   await waitFor(() => expect(scrolled).toContain(card));
   expect(document.activeElement).toBe(card.querySelector("textarea"));
 });
+
+test("with the add row off screen, a corner button opens the choices and closes after adding", async () => {
+  mockFetch((url) => {
+    if (url === "/api/v1/me") return { status: 200, body: ME };
+    if (url === "/api/v1/quizzes/q1") return { status: 200, body: DOC };
+  });
+  // The add row after the last question is scrolled out of view.
+  globalThis.IntersectionObserver = class {
+    constructor(private cb: IntersectionObserverCallback) {}
+    observe() {
+      this.cb([{ isIntersecting: false } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+    }
+    disconnect() {}
+  } as unknown as typeof IntersectionObserver;
+  renderApp("/quizzes/q1/edit");
+  const toggle = await screen.findByRole("button", { name: "+ Thêm câu hỏi" });
+  expect(screen.queryByRole("menu")).toBeNull();
+  fireEvent.click(toggle);
+  fireEvent.click(screen.getByRole("menuitem", { name: "+ Điền từ" }));
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(await screen.findByRole("article", { name: "Câu 2" })).toBeTruthy();
+  // @ts-expect-error jsdom has none; later tests expect that.
+  delete globalThis.IntersectionObserver;
+});
