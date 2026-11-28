@@ -96,6 +96,9 @@ pub struct QuizSummary {
     pub visibility: String,
     #[ts(type = "number")]
     pub question_count: i64,
+    /// How many people it is shared with by email.
+    #[ts(type = "number")]
+    pub shared_with: i64,
     pub updated_at: String,
     pub expires_at: String,
 }
@@ -238,4 +241,48 @@ pub struct ImportProblem {
 pub struct ImportRefused {
     pub error: crate::ApiErrorBody,
     pub errors: Vec<ImportProblem>,
+}
+
+/// `GET` and `PUT /quizzes/:id/sharing`: who besides the owner can host or
+/// copy the quiz. Only a published quiz is visible to them; only the owner
+/// can edit it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct QuizSharing {
+    /// "private" or "public". A public quiz is listed for everyone signed in.
+    pub visibility: String,
+    /// People it is shared with, lower case. They need not have an account
+    /// yet. Up to 100.
+    #[serde(default)]
+    pub emails: Vec<String>,
+}
+
+/// `GET /library?scope=` lists published quizzes of other people: scope
+/// "public" or "shared" (shared with the caller's email).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct LibraryQuiz {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub owner_name: String,
+    pub cover_media_url: Option<String>,
+    #[ts(type = "number")]
+    pub question_count: i64,
+    /// RFC 3339.
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../../web/src/generated/")]
+pub struct LibraryPage {
+    pub items: Vec<LibraryQuiz>,
+    /// 1-based.
+    pub page: u32,
+    pub page_size: u32,
+    #[ts(type = "number")]
+    pub total: i64,
 }

@@ -62,6 +62,44 @@
     "hostPublishes": "Publishes this draft first, then opens the lobby",
     "hostBlocked": "\"{{title}}\" can't be hosted yet: fix these first."
   },
+  "share": {
+    "button": "Share",
+    "title": "Share \"{{title}}\"",
+    "public": "Public quiz",
+    "publicHint": "Anyone signed in can find it under Public quizzes, host it, or copy it.",
+    "people": "Share with people",
+    "peopleHint": "They find it under Shared with me and can host it or copy it. Only you can edit it. Paste several addresses at once if you like.",
+    "emailPlaceholder": "Email address",
+    "add": "Add",
+    "remove": "Remove",
+    "removeEmail": "Remove {{email}}",
+    "draftNote": "This quiz is still a draft: others will see it once it is published.",
+    "answersNote": "Anyone who can host or copy the quiz can see its correct answers.",
+    "emailInvalid": "\"{{email}}\" is not an email address.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "saving": "Saving…",
+    "badgePublic": "Public",
+    "badgeShared_one": "Shared with {{count}} person",
+    "badgeShared_other": "Shared with {{count}} people"
+  },
+  "library": {
+    "tabs": "Quiz lists",
+    "tab": {
+      "mine": "My quizzes",
+      "shared": "Shared with me",
+      "public": "Public quizzes"
+    },
+    "sharedIntro": "Quizzes other people shared with you. Host one, or copy it to My quizzes to make your own version.",
+    "publicIntro": "Quizzes anyone can use. Host one, or copy it to My quizzes to make your own version.",
+    "sharedEmpty": "Nobody has shared a quiz with you yet.",
+    "publicEmpty": "There are no public quizzes yet.",
+    "by": "by {{name}}",
+    "updated": "updated {{date}}",
+    "copy": "Copy to my quizzes",
+    "copied": "\"{{title}}\" is now in My quizzes.",
+    "openCopy": "Open it"
+  },
   "problems": {
     "question": "question {{n}}",
     "TITLE_LENGTH": "The title must be 1 to 120 characters.",
@@ -131,7 +169,8 @@
     "SESSION_NOT_FOUND": "Report not found.",
     "CANNOT_SUSPEND_SELF": "An admin cannot suspend their own account.",
     "USER_NOT_FOUND": "User not found.",
-    "NAME_LENGTH": "The game name can be at most 80 characters."
+    "NAME_LENGTH": "The game name can be at most 80 characters.",
+    "TOO_MANY_SHARES": "A quiz can be shared with at most 100 people."
   },
   "editor": {
     "saved": "Saved",

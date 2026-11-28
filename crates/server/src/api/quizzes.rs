@@ -93,6 +93,22 @@ pub async fn load_quiz<'e, E>(
 where
     E: sqlx::PgExecutor<'e>,
 {
+    match fetch_row(db, state, id, for_update).await? {
+        Some(r) if r.owner_id == user.id || (admin_ok && user.is_admin()) => Ok(r),
+        _ => Err(AppError::not_found("QUIZ_NOT_FOUND")),
+    }
+}
+
+/// A live quiz by id, whoever owns it. Callers check access.
+pub async fn fetch_row<'e, E>(
+    db: E,
+    state: &ApiState,
+    id: Uuid,
+    for_update: bool,
+) -> ApiResult<Option<QuizRow>>
+where
+    E: sqlx::PgExecutor<'e>,
+{
     let lock = if for_update { " FOR UPDATE" } else { "" };
     let row: Option<RawRow> = sqlx::query_as(&format!(
         "SELECT {ROW_COLUMNS} FROM quizzes WHERE id = $1 AND deleted_at IS NULL{lock}"
@@ -101,13 +117,7 @@ where
     .bind(state.retention_days as i32)
     .fetch_optional(db)
     .await?;
-    let Some(r) = row else {
-        return Err(AppError::not_found("QUIZ_NOT_FOUND"));
-    };
-    if r.1 != user.id && !(admin_ok && user.is_admin()) {
-        return Err(AppError::not_found("QUIZ_NOT_FOUND"));
-    }
-    Ok(QuizRow {
+    Ok(row.map(|r| QuizRow {
         id: r.0,
         owner_id: r.1,
         title: r.2,
@@ -119,7 +129,7 @@ where
         version: r.8,
         updated_at: r.9,
         expires_at: r.10,
-    })
+    }))
 }
 
 /// The quiz's questions in order, in editor form.
@@ -330,10 +340,12 @@ fn invalid(status: StatusCode, problems: Vec<QuizProblemDoc>) -> Response {
     (status, Json(body)).into_response()
 }
 
-/// Every image the quiz refers to must be the user's own upload.
+/// Every image the quiz refers to must be the user's own upload, or one the
+/// saved quiz already uses (a copy of someone's shared quiz keeps its images).
 async fn check_media(
     tx: &mut Transaction<'_, Postgres>,
     owner: Uuid,
+    quiz: Option<Uuid>,
     q: &SaveQuiz,
 ) -> ApiResult<Vec<QuizProblemDoc>> {
     let mut wanted: Vec<(Option<usize>, Uuid)> = Vec::new();
@@ -349,12 +361,16 @@ async fn check_media(
         return Ok(Vec::new());
     }
     let ids: Vec<Uuid> = wanted.iter().map(|(_, id)| *id).collect();
-    let found: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM media WHERE id = ANY($1) AND owner_id = $2")
-            .bind(&ids)
-            .bind(owner)
-            .fetch_all(&mut **tx)
-            .await?;
+    let found: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM media m WHERE m.id = ANY($1) AND (m.owner_id = $2 \
+               OR EXISTS (SELECT 1 FROM quizzes WHERE id = $3 AND cover_media_id = m.id) \
+               OR EXISTS (SELECT 1 FROM questions WHERE quiz_id = $3 AND media_id = m.id))",
+    )
+    .bind(&ids)
+    .bind(owner)
+    .bind(quiz)
+    .fetch_all(&mut **tx)
+    .await?;
     Ok(wanted
         .into_iter()
         .filter(|(_, id)| !found.contains(id))
@@ -501,12 +517,14 @@ pub async fn list(
         String,
         String,
         i64,
+        i64,
         OffsetDateTime,
         OffsetDateTime,
         i64,
     )> = sqlx::query_as(
         "SELECT q.id, q.title, q.status::text, q.visibility::text, \
                     (SELECT count(*) FROM questions WHERE quiz_id = q.id), \
+                    (SELECT count(*) FROM quiz_shares WHERE quiz_id = q.id), \
                     q.updated_at, q.last_used_at + make_interval(days => $3), \
                     count(*) OVER () \
              FROM quizzes q \
@@ -522,7 +540,7 @@ pub async fn list(
     .fetch_all(&state.app.db)
     .await?;
     let total = match rows.first() {
-        Some(r) => r.7,
+        Some(r) => r.8,
         None if page == 1 => 0,
         None => {
             sqlx::query_scalar(
@@ -544,8 +562,9 @@ pub async fn list(
                 status: r.2,
                 visibility: r.3,
                 question_count: r.4,
-                updated_at: rfc3339(r.5),
-                expires_at: rfc3339(r.6),
+                shared_with: r.5,
+                updated_at: rfc3339(r.6),
+                expires_at: rfc3339(r.7),
             })
             .collect(),
         page,
@@ -566,7 +585,7 @@ pub async fn create(
         return Ok(invalid(StatusCode::UNPROCESSABLE_ENTITY, problems));
     }
     let mut tx = state.app.db.begin().await?;
-    let problems = check_media(&mut tx, user.id, &body).await?;
+    let problems = check_media(&mut tx, user.id, None, &body).await?;
     if !problems.is_empty() {
         return Ok(invalid(StatusCode::UNPROCESSABLE_ENTITY, problems));
     }
@@ -661,7 +680,7 @@ pub async fn save(
             format!("the quiz is at version {}", row.version),
         ));
     }
-    let problems = check_media(&mut tx, row.owner_id, &body).await?;
+    let problems = check_media(&mut tx, row.owner_id, Some(id), &body).await?;
     if !problems.is_empty() {
         return Ok(invalid(StatusCode::UNPROCESSABLE_ENTITY, problems));
     }
@@ -726,14 +745,16 @@ pub async fn delete(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `POST /quizzes/:id/duplicate`: a private draft copy named "… (copy)".
+/// `POST /quizzes/:id/duplicate`: a private draft copy named "… (copy)",
+/// owned by the caller. Works on the caller's own quizzes and on quizzes
+/// shared with them or public; the copy is independent of the original.
 pub async fn duplicate(
     State(state): State<ApiState>,
     user: AuthUser,
     Path(id): Path<String>,
 ) -> ApiResult<Response> {
     let id = parse_id(&id)?;
-    let row = load_quiz(&state.app.db, &state, &user, id, false, false).await?;
+    let row = super::sharing::load_usable(&state, &user, id).await?;
     let questions = load_questions(&state.app.db, id).await?;
     let suffix = " (copy)";
     let keep = TITLE_MAX - suffix.chars().count();

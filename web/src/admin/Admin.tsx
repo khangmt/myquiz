@@ -157,6 +157,7 @@ const ACTIONS = [
   "quiz_deleted",
   "quiz_exported",
   "quiz_imported",
+  "quiz_sharing_changed",
   "report_exported",
   "report_deleted",
   "retention_notice_sent",
